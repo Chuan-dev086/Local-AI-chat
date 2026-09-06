@@ -7,10 +7,14 @@ A local AI chatbot powered by Ollama + qwen2.5:7b, with a Node.js + Express back
 ## ✨ Features
 
 - 🧠 **Multi-turn Conversations** — Session-based memory keeps context coherent
-- ⚡ **Local Inference** — Completely offline, no external API calls
-- 🎯 **Real-time Feedback** — Loading indicator shows processing status
-- 🔄 **Fresh Start** — One-click "New Chat" button
-- 📦 **Ready to Use** — Simple setup, get started in minutes
+- ⚡ **Local Inference** — Runs locally through Ollama with no external AI API calls
+- 🎯 **Real-time Feedback** — Displays a “Thinking…” state while waiting for a response
+- 💾 **Local Persistence** — The active chat is saved in browser localStorage and restored after refresh
+- 🤖 **Chat Modes** — Switch between General Chat and Programming Assistant modes
+- 📝 **Markdown Rendering** — AI responses support headings, lists, links, inline code, and code blocks
+- 📋 **Code Copying** — Copy code directly from rendered code blocks
+- ⬇️ **Auto-scroll** — Automatically scrolls to the latest message
+- 🔄 **Fresh Start** — Start a new empty conversation with one click
 
 ## 🛠️ Tech Stack
 
@@ -73,10 +77,15 @@ Open browser at `http://localhost:5173`
 
 ## 💬 Usage
 
-1. Type your message in the chat box
-2. Press **Enter** or click **Send**
-3. Wait for the AI response
-4. Click **New Chat** to start a fresh conversation
+1. Start Ollama, the backend, and the frontend.
+2. Select **General Chat** or **Programming Assistant** from the mode selector.
+3. Type a message and press **Enter** or click **Send**.
+4. Use **Shift + Enter** to add a new line without sending the message.
+5. AI replies support Markdown formatting and code blocks.
+6. Click **Copy** on a code block to copy its code.
+7. The active conversation is automatically saved in browser localStorage.
+8. Refreshing the page restores the active conversation.
+9. Click **New Chat** to create a fresh conversation.
 
 ## 🔌 API
 
@@ -121,23 +130,16 @@ Pull a different model:
 ollama pull mistral:7b
 ```
 
-### System Prompt (Reserved for Future Use)
+### Chat Modes and System Prompts
 
-This version does not use a custom system prompt. Messages are sent directly to the model without additional system instructions.
+The backend supports two chat modes:
 
-To add a system prompt in the future, you can extend `backend/server.js` to include a `system` message in the `messages` array sent to Ollama, for example:
+- **General Chat** — A general-purpose assistant for everyday questions and conversations.
+- **Programming Assistant** — A learning-focused assistant that explains programming concepts, provides examples, and helps users understand code step by step.
 
-```javascript
-session.messages = [
-  {
-    role: "system",
-    content: "You are a helpful AI assistant. Answer clearly and concisely.",
-  },
-  ...session.messages,
-];
-```
+The selected mode is sent from the frontend to the backend. The backend applies the matching system prompt before sending messages to Ollama.
 
-This is left as an optional extension for future customization.
+To customize these behaviors, edit the `SYSTEM_PROMPTS` object in `backend/server.js`.
 
 ### Change Port
 
