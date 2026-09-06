@@ -8,13 +8,15 @@ A local AI chatbot powered by Ollama + qwen2.5:7b, with a Node.js + Express back
 
 - 🧠 **Multi-turn Conversations** — Session-based memory keeps context coherent
 - ⚡ **Local Inference** — Runs locally through Ollama with no external AI API calls
-- 🎯 **Real-time Feedback** — Displays a “Thinking…” state while waiting for a response
-- 💾 **Local Persistence** — The active chat is saved in browser localStorage and restored after refresh
+- 🎯 **Real-time Feedback** — Displays a "Thinking…" state while waiting for a response
+- 💾 **Persistent Multi-session History** — All chat sessions are stored in browser localStorage and restored after refresh
 - 🤖 **Chat Modes** — Switch between General Chat and Programming Assistant modes
 - 📝 **Markdown Rendering** — AI responses support headings, lists, links, inline code, and code blocks
 - 📋 **Code Copying** — Copy code directly from rendered code blocks
 - ⬇️ **Auto-scroll** — Automatically scrolls to the latest message
 - 🔄 **Fresh Start** — Start a new empty conversation with one click
+- 💬 **Multiple Chat Sessions** — Create, switch, rename, and delete separate conversations
+- 🏷️ **Automatic Chat Titles** — The first user message becomes the conversation title
 
 ## 🛠️ Tech Stack
 
@@ -25,7 +27,9 @@ A local AI chatbot powered by Ollama + qwen2.5:7b, with a Node.js + Express back
 ## 📋 Prerequisites
 
 - **Node.js** v16+ ([Download](https://nodejs.org/))
-- **Ollama** installed and running ([Download](https://ollama.com/))
+- **Ollama** installed and running  
+  - Windows: Install the [Ollama desktop app](https://ollama.com/download/windows) or run `ollama serve` in PowerShell  
+  - macOS / Linux: Run `ollama serve` in terminal
 - **Model pulled:** `ollama pull qwen2.5:7b`
 
 **System Requirements:**
@@ -83,9 +87,11 @@ Open browser at `http://localhost:5173`
 4. Use **Shift + Enter** to add a new line without sending the message.
 5. AI replies support Markdown formatting and code blocks.
 6. Click **Copy** on a code block to copy its code.
-7. The active conversation is automatically saved in browser localStorage.
-8. Refreshing the page restores the active conversation.
+7. All conversations are automatically saved in browser localStorage.
+8. Refreshing the page restores all chat sessions.
 9. Click **New Chat** to create a fresh conversation.
+10. Use the sidebar to switch between different chat sessions.
+11. Click the pencil icon to rename a chat, or the × button to delete it.
 
 ## 🔌 API
 
@@ -97,8 +103,7 @@ Send a message to the AI.
 
 ```json
 {
-  "message": "What is the capital of France?",
-  "sessionId": "user-session-123"
+  "message": "What is the capital of France?"
 }
 ```
 
@@ -109,6 +114,8 @@ Send a message to the AI.
   "content": "The capital of France is Paris..."
 }
 ```
+
+> Note: Multi-session management is currently handled on the frontend using browser localStorage. The backend processes each request independently.
 
 ### Starting a New Chat
 
@@ -183,12 +190,16 @@ ollama list
 
 ### GPU Acceleration
 
-Install NVIDIA CUDA toolkit, then:
+Ollama automatically uses your NVIDIA GPU if CUDA is available.  
+You can verify GPU usage in the `ollama serve` logs:
 
-```bash
-export OLLAMA_GPU=1
-ollama serve
+```text
+library=CUDA ... description="NVIDIA GeForce RTX 3050 Laptop GPU"
 ```
+
+No extra configuration is usually required.
+
+For advanced control, see the [Ollama documentation](https://ollama.com/) on GPU configuration.
 
 ### Frontend can't connect to backend
 
