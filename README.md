@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A local AI chatbot powered by Ollama + qwen2.5:7b, with a Node.js + Express backend and a React + Vite frontend.
+A local AI chatbot powered by Ollama + qwen2.5:7b, with a Node.js + Express backend and a React + Vite frontend styled with Material-UI (MUI).
 
 ## ✨ Features
 
@@ -17,12 +17,32 @@ A local AI chatbot powered by Ollama + qwen2.5:7b, with a Node.js + Express back
 - 🔄 **Fresh Start** — Start a new empty conversation with one click
 - 💬 **Multiple Chat Sessions** — Create, switch, rename, and delete separate conversations
 - 🏷️ **Automatic Chat Titles** — The first user message becomes the conversation title
+- 🌙 **Dark Mode** — Toggle between light and dark themes with persistent preference
 
 ## 🛠️ Tech Stack
 
 - **Backend:** Node.js, Express, Axios
-- **Frontend:** Vite, React, CSS3
+- **Frontend:** Vite, React, Material-UI (MUI)
 - **Model:** Ollama + `qwen2.5:7b` (Local LLM)
+
+## 📁 Project Structure
+
+```
+src/
+│
+├── App.jsx
+│
+├── components/
+│   ├── Sidebar.jsx
+│   ├── ChatHeader.jsx
+│   ├── MessageList.jsx
+│   ├── MessageBubble.jsx
+│   ├── ChatInput.jsx
+│   └── CopyButton.jsx
+│
+└── theme/
+    └── theme.js
+```
 
 ## 📋 Prerequisites
 
@@ -92,6 +112,7 @@ Open browser at `http://localhost:5173`
 9. Click **New Chat** to create a fresh conversation.
 10. Use the sidebar to switch between different chat sessions.
 11. Click the pencil icon to rename a chat, or the × button to delete it.
+12. Click the **dark mode toggle button** in the header to switch between light and dark themes.
 
 ## 🔌 API
 
@@ -161,6 +182,16 @@ Frontend API in `frontend/src/App.jsx`:
 ```javascript
 const API_URL = "http://localhost:5000/api/chat";
 ```
+
+### Theme Configuration
+
+The theme system is defined in `src/theme/theme.js`:
+
+- **Light Mode:** Default theme with light backgrounds and dark text
+- **Dark Mode:** Dark backgrounds with light text for reduced eye strain
+- **Persistence:** Theme preference is saved in localStorage and restored on page reload
+
+To customize colors, edit the `lightColors` and `darkColors` objects in `theme.js`.
 
 ## 🐛 Troubleshooting
 
@@ -246,6 +277,7 @@ const PORT = process.env.PORT || 5000;
 - Express ^4.18.0
 - React ^18.0.0
 - Vite ^5.0.0
+- Material-UI (MUI)
 - Ollama (Latest)
 
 Install:
@@ -273,6 +305,7 @@ This project is licensed under the **MIT License** — see the [LICENSE](./LICEN
 - [Express.js](https://expressjs.com/)
 - [React](https://react.dev/)
 - [Vite](https://vitejs.dev/)
+- [Material-UI (MUI)](https://mui.com/)
 
 ## ⭐ Support
 
@@ -283,4 +316,4 @@ If this helps you, please give it a star! ⭐
 **Last Updated:** 2026  
 **Maintainer:** Chuan-dev086  
 **Status:** Actively Maintained ✅  
-**Version:** 1.0.0
+**Version:** 2.0.0
