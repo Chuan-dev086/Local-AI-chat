@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A local AI chatbot powered by Ollama + qwen2.5:7b, with a Node.js + Express backend and a React + Vite frontend styled with Material-UI (MUI).
+A local AI chatbot powered by Ollama with specialized models, featuring a Node.js + Express backend and a React + Vite frontend styled with Material-UI (MUI).
 
 ## ✨ Features
 
@@ -10,7 +10,9 @@ A local AI chatbot powered by Ollama + qwen2.5:7b, with a Node.js + Express back
 - ⚡ **Local Inference** — Runs locally through Ollama with no external AI API calls
 - 🎯 **Real-time Feedback** — Displays a "Thinking…" state while waiting for a response
 - 💾 **Persistent Multi-session History** — All chat sessions are stored in browser localStorage and restored after refresh
-- 🤖 **Chat Modes** — Switch between General Chat and Programming Assistant modes
+- 🤖 **Chat Modes with Specialized Models** — Automatically routes to optimized models:
+  - **General Chat** → `qwen3:4b` for balanced performance
+  - **Programming Assistant** → `qwen2.5-coder:3b` for code-focused assistance
 - 📝 **Markdown Rendering** — AI responses support headings, lists, links, inline code, and code blocks
 - 📋 **Code Copying** — Copy code directly from rendered code blocks
 - ⬇️ **Auto-scroll** — Automatically scrolls to the latest message
@@ -23,7 +25,9 @@ A local AI chatbot powered by Ollama + qwen2.5:7b, with a Node.js + Express back
 
 - **Backend:** Node.js, Express, Axios
 - **Frontend:** Vite, React, Material-UI (MUI)
-- **Model:** Ollama + `qwen2.5:7b` (Local LLM)
+- **Models:** Ollama with specialized models per chat mode:
+  - `qwen3:4b` for General Chat
+  - `qwen2.5-coder:3b` for Programming Assistant
 
 ## 📁 Project Structure
 
@@ -50,12 +54,14 @@ src/
 - **Ollama** installed and running  
   - Windows: Install the [Ollama desktop app](https://ollama.com/download/windows) or run `ollama serve` in PowerShell  
   - macOS / Linux: Run `ollama serve` in terminal
-- **Model pulled:** `ollama pull qwen2.5:7b`
+- **Models pulled:**
+  - `ollama pull qwen3:4b` (General Chat)
+  - `ollama pull qwen2.5-coder:3b` (Programming Assistant)
 
 **System Requirements:**
 
 - RAM: Minimum 4GB (8GB+ recommended)
-- Disk: ~4-5GB per model
+- Disk: ~2-3GB per model (total ~4-6GB)
 - GPU: Optional (NVIDIA CUDA supported)
 
 ## 🚀 Quick Start
@@ -79,7 +85,20 @@ ollama serve
 curl http://localhost:11434/api/tags
 ```
 
-### 2. Start Backend
+### 2. Pull Required Models
+
+```bash
+ollama pull qwen3:4b
+ollama pull qwen2.5-coder:3b
+```
+
+Verify models are installed:
+
+```bash
+ollama list
+```
+
+### 3. Start Backend
 
 ```bash
 cd backend
@@ -89,7 +108,7 @@ npm start
 
 Backend will run at `http://localhost:5000`
 
-### 3. Start Frontend
+### 4. Start Frontend
 
 ```bash
 cd frontend
@@ -103,6 +122,7 @@ Open browser at `http://localhost:5173`
 
 1. Start Ollama, the backend, and the frontend.
 2. Select **General Chat** or **Programming Assistant** from the mode selector.
+   - The backend automatically routes to the appropriate model for your selected mode
 3. Type a message and press **Enter** or click **Send**.
 4. Use **Shift + Enter** to add a new line without sending the message.
 5. AI replies support Markdown formatting and code blocks.
@@ -118,13 +138,14 @@ Open browser at `http://localhost:5173`
 
 ### POST `/api/chat`
 
-Send a message to the AI.
+Send a message to the AI with the selected chat mode.
 
 **Request:**
 
 ```json
 {
-  "message": "What is the capital of France?"
+  "message": "What is the capital of France?",
+  "mode": "general"
 }
 ```
 
@@ -136,7 +157,7 @@ Send a message to the AI.
 }
 ```
 
-> Note: Multi-session management is currently handled on the frontend using browser localStorage. The backend processes each request independently.
+> Note: The backend automatically routes to the specialized model based on the selected mode. Multi-session management is handled on the frontend using browser localStorage. The backend processes each request independently while preserving session-based conversation history.
 
 ### Starting a New Chat
 
@@ -144,18 +165,24 @@ Click the **"New Chat"** button in the UI. The frontend generates a new `session
 
 ## ⚙️ Configuration
 
-### Change Model
+### Model Routing
 
-Edit `backend/server.js`:
+The backend automatically routes requests to specialized models based on chat mode:
+
+**Edit `backend/server.js`:**
 
 ```javascript
-const model = "qwen2.5:7b"; // Change to: qwen2:1.8b, mistral:7b, etc.
+const MODELS = {
+  general: "qwen3:4b",
+  programming: "qwen2.5-coder:3b"
+};
 ```
 
-Pull a different model:
+Each request logs the selected model for debugging:
 
-```bash
-ollama pull mistral:7b
+```
+[INFO] Processing mode: general → using model: qwen3:4b
+[INFO] Processing mode: programming → using model: qwen2.5-coder:3b
 ```
 
 ### Chat Modes and System Prompts
@@ -165,7 +192,7 @@ The backend supports two chat modes:
 - **General Chat** — A general-purpose assistant for everyday questions and conversations.
 - **Programming Assistant** — A learning-focused assistant that explains programming concepts, provides examples, and helps users understand code step by step.
 
-The selected mode is sent from the frontend to the backend. The backend applies the matching system prompt before sending messages to Ollama.
+The selected mode is sent from the frontend to the backend. The backend routes to the appropriate model and applies the matching system prompt before sending messages to Ollama.
 
 To customize these behaviors, edit the `SYSTEM_PROMPTS` object in `backend/server.js`.
 
@@ -205,17 +232,29 @@ curl http://localhost:11434/api/tags
 curl http://localhost:5000/api/chat
 ```
 
-### Model not found
+### Models not found
 
 ```bash
-ollama pull qwen2.5:7b
+ollama pull qwen3:4b
+ollama pull qwen2.5-coder:3b
 ollama list
 ```
+
+### Model mismatch error
+
+If you see an error like "model not found", ensure both specialized models are pulled:
+
+```bash
+ollama pull qwen3:4b
+ollama pull qwen2.5-coder:3b
+```
+
+Check backend logs for which model was being requested.
 
 ### Slow responses
 
 1. Check system resources (RAM, CPU)
-2. Try a smaller model: `ollama pull qwen2:1.8b`
+2. Verify which model is being used (check backend logs)
 3. Close other applications
 4. Enable GPU (see below)
 
@@ -244,13 +283,13 @@ For advanced control, see the [Ollama documentation](https://ollama.com/) on GPU
 ### Custom System Prompts
 
 ```javascript
-// Study Assistant
+// General Chat
 const systemPrompt =
-  "You are a helpful study assistant. Explain concepts with examples.";
+  "You are a helpful and friendly AI assistant. Answer questions clearly and concisely.";
 
-// Code Reviewer
+// Programming Assistant
 const systemPrompt =
-  "You are an expert code reviewer. Review code for quality and security.";
+  "You are an expert programming tutor. Explain concepts with examples, help users understand code step by step, and provide learning-focused explanations.";
 ```
 
 ### Environment Variables
@@ -259,7 +298,8 @@ Create `.env` in backend:
 
 ```env
 OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL=qwen2.5:7b
+OLLAMA_MODEL_GENERAL=qwen3:4b
+OLLAMA_MODEL_PROGRAMMING=qwen2.5-coder:3b
 PORT=5000
 ```
 
@@ -267,7 +307,10 @@ Then in `backend/server.js`:
 
 ```javascript
 require("dotenv").config();
-const MODEL = process.env.OLLAMA_MODEL || "qwen2.5:7b";
+const MODELS = {
+  general: process.env.OLLAMA_MODEL_GENERAL || "qwen3:4b",
+  programming: process.env.OLLAMA_MODEL_PROGRAMMING || "qwen2.5-coder:3b"
+};
 const PORT = process.env.PORT || 5000;
 ```
 
@@ -316,4 +359,12 @@ If this helps you, please give it a star! ⭐
 **Last Updated:** 2026  
 **Maintainer:** Chuan-dev086  
 **Status:** Actively Maintained ✅  
-**Version:** 2.0.0
+**Version:** 2.1.0
+
+## 🎯 Recent Changes (v2.1.0)
+
+- **Model Specialization:** Routes chat modes to specialized Ollama models
+  - General Chat uses `qwen3:4b` for balanced conversational performance
+  - Programming Assistant uses `qwen2.5-coder:3b` for code-focused assistance
+- **Enhanced Logging:** Each request logs the selected model for easier debugging
+- **Preserved Session History:** Multi-session conversation history maintained across mode switches
