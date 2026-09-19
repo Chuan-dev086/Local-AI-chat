@@ -11,8 +11,9 @@ A local AI chatbot powered by Ollama with specialized models, featuring a Node.j
 - 🎯 **Real-time Feedback** — Displays a "Thinking…" state while waiting for a response
 - 💾 **Persistent Multi-session History** — All chat sessions are stored in browser localStorage and restored after refresh
 - 🤖 **Chat Modes with Specialized Models** — Automatically routes to optimized models:
-  - **General Chat** → `qwen3:4b` for balanced performance
+  - **General Chat** → `llama3.2:3b` for natural conversations
   - **Programming Assistant** → `qwen2.5-coder:3b` for code-focused assistance
+- 🌍 **Multilingual Support** — Automatic language detection (English, Chinese, Malay) with strict language matching in responses
 - 📝 **Markdown Rendering** — AI responses support headings, lists, links, inline code, and code blocks
 - 📋 **Code Copying** — Copy code directly from rendered code blocks
 - ⬇️ **Auto-scroll** — Automatically scrolls to the latest message
@@ -26,36 +27,48 @@ A local AI chatbot powered by Ollama with specialized models, featuring a Node.j
 - **Backend:** Node.js, Express, Axios
 - **Frontend:** Vite, React, Material-UI (MUI)
 - **Models:** Ollama with specialized models per chat mode:
-  - `qwen3:4b` for General Chat
-  - `qwen2.5-coder:3b` for Programming Assistant
+  - `llama3.2:3b` for General Chat (natural conversations)
+  - `qwen2.5-coder:3b` for Programming Assistant (code assistance)
 
 ## 📁 Project Structure
 
 ```
-src/
+.
+├── backend/
+│   ├── server.js
+│   ├── package.json
+│   └── node_modules/
 │
-├── App.jsx
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx
+│   │   ├── components/
+│   │   │   ├── Sidebar.jsx
+│   │   │   ├── ChatHeader.jsx
+│   │   │   ├── MessageList.jsx
+│   │   │   ├── MessageBubble.jsx
+│   │   │   ├── ChatInput.jsx
+│   │   │   └── CopyButton.jsx
+│   │   ├── theme/
+│   │   │   └── theme.js
+│   │   ├── main.jsx
+│   │   └── ...
+│   ├── index.html
+│   ├── vite.config.js
+│   ├── package.json
+│   └── node_modules/
 │
-├── components/
-│   ├── Sidebar.jsx
-│   ├── ChatHeader.jsx
-│   ├── MessageList.jsx
-│   ├── MessageBubble.jsx
-│   ├── ChatInput.jsx
-│   └── CopyButton.jsx
-│
-└── theme/
-    └── theme.js
+└── README.md
 ```
 
 ## 📋 Prerequisites
 
 - **Node.js** v16+ ([Download](https://nodejs.org/))
-- **Ollama** installed and running  
-  - Windows: Install the [Ollama desktop app](https://ollama.com/download/windows) or run `ollama serve` in PowerShell  
+- **Ollama** installed and running
+  - Windows: Install the [Ollama desktop app](https://ollama.com/download/windows) or run `ollama serve` in PowerShell
   - macOS / Linux: Run `ollama serve` in terminal
 - **Models pulled:**
-  - `ollama pull qwen3:4b` (General Chat)
+  - `ollama pull llama3.2:3b` (General Chat)
   - `ollama pull qwen2.5-coder:3b` (Programming Assistant)
 
 **System Requirements:**
@@ -88,7 +101,7 @@ curl http://localhost:11434/api/tags
 ### 2. Pull Required Models
 
 ```bash
-ollama pull qwen3:4b
+ollama pull llama3.2:3b
 ollama pull qwen2.5-coder:3b
 ```
 
@@ -104,6 +117,7 @@ ollama list
 cd backend
 npm install
 npm start
+# or: nodemon server.js
 ```
 
 Backend will run at `http://localhost:5000`
@@ -138,30 +152,51 @@ Open browser at `http://localhost:5173`
 
 ### POST `/api/chat`
 
-Send a message to the AI with the selected chat mode.
+Send a message to the AI and retrieve a response.
 
-**Request:**
+**Language Detection:**
 
-```json
-{
-  "message": "What is the capital of France?",
-  "mode": "general"
-}
+- The AI automatically detects the language of your message (English, Chinese, or Malay)
+- It responds **strictly in the same language** for consistency
+- This applies across all conversation turns in a session
+
+**Example Requests:**
+
+Chat mode (natural conversation):
+
+```bash
+curl -X POST http://localhost:5000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sessionId": "user123",
+    "message": "How are you?",
+    "mode": "chat"
+  }'
 ```
 
-**Response:**
+Code mode (programming help):
 
-```json
-{
-  "content": "The capital of France is Paris..."
-}
+```bash
+curl -X POST http://localhost:5000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sessionId": "user123",
+    "message": "Write a Python function to calculate factorial",
+    "mode": "code"
+  }'
 ```
 
-> Note: The backend automatically routes to the specialized model based on the selected mode. Multi-session management is handled on the frontend using browser localStorage. The backend processes each request independently while preserving session-based conversation history.
+Chinese language example:
 
-### Starting a New Chat
-
-Click the **"New Chat"** button in the UI. The frontend generates a new `sessionId`, which starts a fresh conversation on the server.
+```bash
+curl -X POST http://localhost:5000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sessionId": "user456",
+    "message": "请解释什么是JavaScript",
+    "mode": "chat"
+  }'
+```
 
 ## ⚙️ Configuration
 
@@ -173,26 +208,23 @@ The backend automatically routes requests to specialized models based on chat mo
 
 ```javascript
 const MODELS = {
-  general: "qwen3:4b",
-  programming: "qwen2.5-coder:3b"
+  chat: "llama3.2:3b",
+  code: "qwen2.5-coder:3b",
 };
-```
-
-Each request logs the selected model for debugging:
-
-```
-[INFO] Processing mode: general → using model: qwen3:4b
-[INFO] Processing mode: programming → using model: qwen2.5-coder:3b
 ```
 
 ### Chat Modes and System Prompts
 
 The backend supports two chat modes:
 
-- **General Chat** — A general-purpose assistant for everyday questions and conversations.
-- **Programming Assistant** — A learning-focused assistant that explains programming concepts, provides examples, and helps users understand code step by step.
+- **Chat Mode** (`"chat"`) — A friendly, empathetic virtual AI companion with natural conversation style
+- **Code Mode** (`"code"`) — A professional, efficient coding assistant for programming tasks
 
-The selected mode is sent from the frontend to the backend. The backend routes to the appropriate model and applies the matching system prompt before sending messages to Ollama.
+Both modes include:
+
+- **Strict Language Detection:** Automatically detects input language and responds in the same language
+- **Supported Languages:** English, Chinese (中文), Malay (Bahasa Melayu)
+- **Custom System Prompts:** Each mode has tailored instructions for optimal responses
 
 To customize these behaviors, edit the `SYSTEM_PROMPTS` object in `backend/server.js`.
 
@@ -220,9 +252,18 @@ The theme system is defined in `src/theme/theme.js`:
 
 To customize colors, edit the `lightColors` and `darkColors` objects in `theme.js`.
 
+### Environment Variables
+
+Create `.env` in backend (optional):
+
+```env
+OLLAMA_URL=http://localhost:11434
+PORT=5000
+```
+
 ## 🐛 Troubleshooting
 
-### Connection refused
+### "Model invocation failed"
 
 ```bash
 # Check Ollama
@@ -232,31 +273,52 @@ curl http://localhost:11434/api/tags
 curl http://localhost:5000/api/chat
 ```
 
+- Ensure Ollama is running: `ollama serve`
+- Verify models are downloaded: `ollama list`
+- Check Ollama is accessible at `http://localhost:11434`
+
 ### Models not found
 
 ```bash
-ollama pull qwen3:4b
+ollama pull llama3.2:3b
 ollama pull qwen2.5-coder:3b
 ollama list
 ```
 
-### Model mismatch error
+### Port Already in Use
 
-If you see an error like "model not found", ensure both specialized models are pulled:
+If you get "address already in use" error:
 
 ```bash
-ollama pull qwen3:4b
-ollama pull qwen2.5-coder:3b
+# Change PORT in backend/server.js
+# Or kill the process using the port:
+# Windows: netstat -ano | findstr :5000 and taskkill /PID <PID> /F
+# macOS/Linux: lsof -i :5000 and kill -9 <PID>
 ```
 
-Check backend logs for which model was being requested.
+### Frontend can't connect to backend
+
+1. Verify backend is running: `curl http://localhost:5000/api/chat`
+2. Check `API_URL` in `frontend/src/App.jsx`
+3. Ensure port numbers match (backend: 5000, frontend: 5173)
+4. Clear browser cache and try again
+5. Restart both services
+
+### CORS Issues
+
+If you see CORS errors in the browser console:
+
+1. Ensure backend is running on `http://localhost:5000`
+2. Check that the frontend API URL points to the correct backend URL
+3. Verify backend has proper CORS headers configured
+4. Try accessing backend directly: `curl http://localhost:5000/api/chat`
 
 ### Slow responses
 
 1. Check system resources (RAM, CPU)
 2. Verify which model is being used (check backend logs)
 3. Close other applications
-4. Enable GPU (see below)
+4. Check GPU status (see below)
 
 ### GPU Acceleration
 
@@ -267,52 +329,66 @@ You can verify GPU usage in the `ollama serve` logs:
 library=CUDA ... description="NVIDIA GeForce RTX 3050 Laptop GPU"
 ```
 
-No extra configuration is usually required.
+No extra configuration is usually required. For advanced control, see the [Ollama documentation](https://ollama.com/) on GPU configuration.
 
-For advanced control, see the [Ollama documentation](https://ollama.com/) on GPU configuration.
+### Language not detected correctly
 
-### Frontend can't connect to backend
-
-1. Verify backend is running: `curl http://localhost:5000/api/chat`
-2. Check `API_URL` in `frontend/src/App.jsx`
-3. Ensure port numbers match
-4. Restart both services
+- The AI uses strict language detection based on your input
+- If it responds in the wrong language, check:
+  1. Your message language is clearly English, Chinese, or Malay
+  2. Backend is using the correct system prompt (check logs)
+  3. Try rephrasing your message more clearly
 
 ## 📚 Advanced
 
 ### Custom System Prompts
 
+Both chat modes use detailed system prompts for optimal behavior:
+
+**Chat Mode System Prompt** (excerpt):
+
+```
+You are a friendly, natural, and empathetic virtual AI companion.
+Detect the language of the user's latest message and reply STRICTLY in that same language.
+Speak like a natural friend with a casual and warm tone.
+```
+
+**Code Mode System Prompt** (excerpt):
+
+```
+You are a professional, efficient, and reliable coding assistant.
+Detect the language of the user's message and reply strictly in the same language.
+Read and explain code, generate clean code, find bugs, and improve code structure.
+```
+
+For full prompts and customization, see `backend/server.js`.
+
+### Input Validation
+
+The backend implements strict input validation:
+
 ```javascript
-// General Chat
-const systemPrompt =
-  "You are a helpful and friendly AI assistant. Answer questions clearly and concisely.";
-
-// Programming Assistant
-const systemPrompt =
-  "You are an expert programming tutor. Explain concepts with examples, help users understand code step by step, and provide learning-focused explanations.";
+if (
+  typeof sessionId !== "string" ||
+  typeof message !== "string" ||
+  !sessionId.trim() ||
+  !message.trim()
+) {
+  return res.status(400).json({
+    error: "Invalid sessionId or message",
+  });
+}
 ```
 
-### Environment Variables
+- All parameters are type-checked
+- Session IDs and messages must be non-empty strings (after trimming)
+- Clear error messages guide users to correct input
 
-Create `.env` in backend:
+### Error Handling & Timeout
 
-```env
-OLLAMA_HOST=http://localhost:11434
-OLLAMA_MODEL_GENERAL=qwen3:4b
-OLLAMA_MODEL_PROGRAMMING=qwen2.5-coder:3b
-PORT=5000
-```
-
-Then in `backend/server.js`:
-
-```javascript
-require("dotenv").config();
-const MODELS = {
-  general: process.env.OLLAMA_MODEL_GENERAL || "qwen3:4b",
-  programming: process.env.OLLAMA_MODEL_PROGRAMMING || "qwen2.5-coder:3b"
-};
-const PORT = process.env.PORT || 5000;
-```
+- **Request Timeout:** 300 seconds per request
+- **Detailed Logging:** All requests log model, session, and error information
+- **User-friendly Errors:** Error messages explain the issue clearly
 
 ## 📦 Dependencies
 
@@ -321,6 +397,7 @@ const PORT = process.env.PORT || 5000;
 - React ^18.0.0
 - Vite ^5.0.0
 - Material-UI (MUI)
+- Axios
 - Ollama (Latest)
 
 Install:
@@ -356,15 +433,15 @@ If this helps you, please give it a star! ⭐
 
 ---
 
-**Last Updated:** 2026  
+**Last Updated:** September 2026  
 **Maintainer:** Chuan-dev086  
 **Status:** Actively Maintained ✅  
-**Version:** 2.1.0
+**Version:** 2.2.0
 
-## 🎯 Recent Changes (v2.1.0)
+## 🎯 Recent Changes (v2.2.0)
 
-- **Model Specialization:** Routes chat modes to specialized Ollama models
-  - General Chat uses `qwen3:4b` for balanced conversational performance
-  - Programming Assistant uses `qwen2.5-coder:3b` for code-focused assistance
-- **Enhanced Logging:** Each request logs the selected model for easier debugging
-- **Preserved Session History:** Multi-session conversation history maintained across mode switches
+- **Model Update:** Chat mode now uses `llama3.2:3b` for improved natural conversation (previously `qwen3:4b`)
+- **Enhanced Multilingual Support:** Added strict language detection rules for English, Chinese, and Malay
+- **Improved API Documentation:** Clarified `sessionId` parameter for session management and conversation context
+- **Better Error Handling:** Enhanced input validation with type checking and 300s timeout protection
+- **Enhanced Logging:** Detailed error messages and model selection logging for debugging
