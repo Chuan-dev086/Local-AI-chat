@@ -1,6 +1,6 @@
 // src/components/MessageList.jsx
 
-import { getThemeStyles } from "../theme/theme";
+import { getMessageListStyles, getThemeStyles } from "../theme/theme";
 import MessageBubble from "./MessageBubble";
 
 function MessageList({
@@ -8,8 +8,10 @@ function MessageList({
   loading,
   chatEndRef,
   theme,
+  onEditMessage,
 }) {
-  const { colors, messagesArea } = getThemeStyles(theme);
+  const { messagesArea } = getThemeStyles(theme);
+  const styles = getMessageListStyles(theme);
 
   const emptyMessage =
     activeSession?.mode === "code"
@@ -19,25 +21,17 @@ function MessageList({
   return (
     <div
       style={{
-        ...messagesArea,
+        messagesArea,
       }}
     >
       {activeSession?.messages.length === 0 && (
-        <div
-          style={{
-            display: "grid",
-            height: "100%",
-            placeItems: "center",
-            color: colors.textMuted,
-            textAlign: "center",
-          }}
-        >
+        <div style={styles.emptyContainer}>
           <div>
-            <div style={{ marginBottom: 10, fontSize: 34 }}>
+            <div style={styles.emptyIcon}>
               {activeSession?.mode === "code" ? "💻" : "💬"}
             </div>
 
-            <div style={{ fontSize: 15 }}>{emptyMessage}</div>
+            <div style={styles.emptyText}>{emptyMessage}</div>
           </div>
         </div>
       )}
@@ -45,34 +39,16 @@ function MessageList({
       {activeSession?.messages.map((message, index) => (
         <MessageBubble
           key={`${message.role}-${index}`}
+          index={index}
           message={message}
           theme={theme}
+          onEditMessage={onEditMessage}
         />
       ))}
 
       {loading && (
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-start",
-            margin: "12px 0",
-          }}
-        >
-          <div
-            style={{
-              padding: "10px 13px",
-              borderRadius: "14px 14px 14px 4px",
-              backgroundColor: colors.messageBg,
-              boxShadow:
-                theme === "dark"
-                  ? "0 1px 3px rgba(0, 0, 0, 0.3)"
-                  : "0 1px 3px rgba(15, 23, 42, 0.1)",
-              color: colors.textMuted,
-              fontSize: 14,
-            }}
-          >
-            Thinking…
-          </div>
+        <div style={styles.loadingWrapper}>
+          <div style={styles.loadingBubble}>Thinking…</div>
         </div>
       )}
 

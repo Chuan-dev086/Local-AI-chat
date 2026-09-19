@@ -1,4 +1,0 @@
-quick open file path 
-file path : 
-type = (cd "C:\Users\User\Desktop\js-study\Own Project\AI_chat\start-ai-chat.ps1")
-then type = (./start.ps1)

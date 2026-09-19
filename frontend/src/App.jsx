@@ -355,6 +355,92 @@ function App() {
     }
   };
 
+  const handleEditMessage = async (messageIndex, newContent) => {
+    const editedText = newContent.trim();
+
+    if (!editedText || loading || !activeSession) {
+      return;
+    }
+
+    const sessionId = activeSession.id;
+
+    const updatedMessages = activeSession.messages
+      .slice(0, messageIndex)
+      .concat({ role: "user", content: editedText });
+
+    setLoading(true);
+
+    setSessions((previousSessions) =>
+      previousSessions.map((session) => {
+        if (session.id !== sessionId) {
+          return session;
+        }
+
+        return {
+          ...session,
+          messages: updatedMessages,
+          updatedAt: new Date().toISOString(),
+        };
+      }),
+    );
+
+    try {
+      const response = await axios.post(API_URL, {
+        sessionId,
+        message: editedText,
+        mode: activeSession.mode,
+      });
+
+      const aiMessage = {
+        role: "assistant",
+        content:
+          response.data.content || "No response was returned by the model.",
+      };
+
+      setSessions((previousSessions) =>
+        previousSessions.map((session) => {
+          if (session.id !== sessionId) {
+            return session;
+          }
+
+          return {
+            ...session,
+            messages: [...updatedMessages, aiMessage],
+            updatedAt: new Date().toISOString(),
+          };
+        }),
+      );
+    } catch (error) {
+      console.error("Edit chat request failed:", error);
+
+      const errorMessage =
+        error.response?.data?.error ||
+        "Unable to connect to the backend or Ollama. Please check that both services are running.";
+
+      setSessions((previousSessions) =>
+        previousSessions.map((session) => {
+          if (session.id !== sessionId) {
+            return session;
+          }
+
+          return {
+            ...session,
+            messages: [
+              ...updatedMessages,
+              {
+                role: "assistant",
+                content: `**Error:** ${errorMessage}`,
+              },
+            ],
+            updatedAt: new Date().toISOString(),
+          };
+        }),
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleKeyDown = (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -385,12 +471,15 @@ function App() {
             onToggleTheme={toggleTheme}
           />
 
-          <MessageList
-            activeSession={activeSession}
-            loading={loading}
-            chatEndRef={chatEndRef}
-            theme={theme}
-          />
+          <div style={themeStyles.messagesArea}>
+            <MessageList
+              activeSession={activeSession}
+              loading={loading}
+              chatEndRef={chatEndRef}
+              theme={theme}
+              onEditMessage={handleEditMessage}
+            />
+          </div>
 
           <ChatInput
             input={input}
