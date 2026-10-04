@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import axios from "axios";
 
 import Sidebar from "./components/Sidebar";
 import ChatHeader from "./components/ChatHeader";
@@ -119,6 +118,7 @@ function App() {
   const [activeSessionId, setActiveSessionId] = useState(
     initialChatState.activeSessionId,
   );
+
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -132,6 +132,10 @@ function App() {
     [sessions, activeSessionId],
   );
 
+  // =========================
+  // Save Chat Sessions
+  // =========================
+
   useEffect(() => {
     localStorage.setItem(
       STORAGE_KEY,
@@ -142,9 +146,17 @@ function App() {
     );
   }, [activeSessionId, sessions]);
 
+  // =========================
+  // Save Theme
+  // =========================
+
   useEffect(() => {
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
+
+  // =========================
+  // Auto Scroll
+  // =========================
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({
@@ -153,9 +165,17 @@ function App() {
     });
   }, [activeSession?.messages, loading]);
 
+  // =========================
+  // Theme
+  // =========================
+
   const toggleTheme = () => {
     setTheme((previousTheme) => (previousTheme === "light" ? "dark" : "light"));
   };
+
+  // =========================
+  // Update Active Session
+  // =========================
 
   const updateActiveSession = (updater) => {
     setSessions((previousSessions) =>
@@ -169,6 +189,10 @@ function App() {
     );
   };
 
+  // =========================
+  // New Chat
+  // =========================
+
   const handleNewChat = () => {
     if (loading) {
       return;
@@ -177,9 +201,15 @@ function App() {
     const newSession = createNewSession(activeSession?.mode || "chat");
 
     setSessions((previousSessions) => [newSession, ...previousSessions]);
+
     setActiveSessionId(newSession.id);
+
     setInput("");
   };
+
+  // =========================
+  // Select Chat
+  // =========================
 
   const handleSelectSession = (sessionId) => {
     if (loading) {
@@ -189,6 +219,10 @@ function App() {
     setActiveSessionId(sessionId);
     setInput("");
   };
+
+  // =========================
+  // Delete Chat
+  // =========================
 
   const handleDeleteSession = (event, sessionId) => {
     event.stopPropagation();
@@ -219,6 +253,7 @@ function App() {
       setSessions([newSession]);
       setActiveSessionId(newSession.id);
       setInput("");
+
       return;
     }
 
@@ -229,6 +264,10 @@ function App() {
       setInput("");
     }
   };
+
+  // =========================
+  // Rename Chat
+  // =========================
 
   const handleRenameSession = () => {
     if (loading || !activeSession) {
@@ -253,6 +292,10 @@ function App() {
     }));
   };
 
+  // =========================
+  // Change Chat Mode
+  // =========================
+
   const handleModeChange = (event) => {
     const newMode = event.target.value;
 
@@ -263,6 +306,125 @@ function App() {
     }));
   };
 
+  // ============================================================
+  // Streaming Helper
+  // ============================================================
+
+  const streamChatResponse = async ({
+    sessionId,
+    message,
+    mode,
+    messages,
+    onChunk,
+  }) => {
+    const response = await fetch(API_URL, {
+      method: "POST",
+
+      headers: {
+        "Content-Type": "application/json",
+      },
+
+      body: JSON.stringify({
+        sessionId,
+        message,
+        mode,
+        messages,
+      }),
+    });
+
+    if (!response.ok) {
+      let errorMessage = "Unable to connect to the backend or Ollama.";
+
+      try {
+        const errorData = await response.json();
+
+        if (errorData.error) {
+          errorMessage = errorData.error;
+        }
+      } catch {
+        // Ignore JSON parsing error
+      }
+
+      throw new Error(errorMessage);
+    }
+
+    if (!response.body) {
+      throw new Error("Streaming response is not supported by this browser.");
+    }
+
+    const reader = response.body.getReader();
+
+    const decoder = new TextDecoder("utf-8");
+
+    let buffer = "";
+    let finished = false;
+
+    while (!finished) {
+      const { value, done } = await reader.read();
+
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, {
+        stream: true,
+      });
+
+      const lines = buffer.split("\n");
+
+      // Keep the last incomplete line in the buffer
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+
+        if (!trimmedLine) {
+          continue;
+        }
+
+        try {
+          const data = JSON.parse(trimmedLine);
+
+          if (data.error) {
+            throw new Error(data.error);
+          }
+
+          if (data.content) {
+            onChunk(data.content);
+          }
+
+          if (data.done) {
+            finished = true;
+            break;
+          }
+        } catch (error) {
+          console.error("Failed to parse streaming chunk:", error);
+        }
+      }
+    }
+
+    // Process any remaining data
+    if (buffer.trim()) {
+      try {
+        const data = JSON.parse(buffer.trim());
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        if (data.content) {
+          onChunk(data.content);
+        }
+      } catch (error) {
+        console.error("Failed to parse final streaming chunk:", error);
+      }
+    }
+  };
+
+  // =========================
+  // Send Message
+  // =========================
+
   const handleSendMessage = async () => {
     const userText = input.trim();
 
@@ -271,15 +433,22 @@ function App() {
     }
 
     const sessionId = activeSession.id;
+    const sessionMode = activeSession.mode;
 
     const userMessage = {
       role: "user",
       content: userText,
     };
 
+    const conversationMessages = [...activeSession.messages, userMessage];
+
+    // Clear input immediately
     setInput("");
+
+    // Start loading
     setLoading(true);
 
+    // Add user message + empty assistant message
     setSessions((previousSessions) =>
       previousSessions.map((session) => {
         if (session.id !== sessionId) {
@@ -288,47 +457,69 @@ function App() {
 
         return {
           ...session,
+
           title:
             session.messages.length === 0
               ? getTitleFromMessage(userText)
               : session.title,
-          messages: [...session.messages, userMessage],
+
+          messages: [
+            ...session.messages,
+            userMessage,
+            {
+              role: "assistant",
+              content: "",
+            },
+          ],
+
           updatedAt: new Date().toISOString(),
         };
       }),
     );
 
     try {
-      const response = await axios.post(API_URL, {
+      await streamChatResponse({
         sessionId,
         message: userText,
-        mode: activeSession.mode,
+        mode: sessionMode,
+        messages: conversationMessages,
+
+        onChunk: (content) => {
+          setSessions((previousSessions) =>
+            previousSessions.map((session) => {
+              if (session.id !== sessionId) {
+                return session;
+              }
+
+              const messages = [...session.messages];
+
+              const lastMessageIndex = messages.length - 1;
+
+              const lastMessage = messages[lastMessageIndex];
+
+              if (lastMessage?.role !== "assistant") {
+                return session;
+              }
+
+              messages[lastMessageIndex] = {
+                ...lastMessage,
+                content: `${lastMessage.content}${content}`,
+              };
+
+              return {
+                ...session,
+                messages,
+                updatedAt: new Date().toISOString(),
+              };
+            }),
+          );
+        },
       });
-
-      const aiMessage = {
-        role: "assistant",
-        content:
-          response.data.content || "No response was returned by the model.",
-      };
-
-      setSessions((previousSessions) =>
-        previousSessions.map((session) => {
-          if (session.id !== sessionId) {
-            return session;
-          }
-
-          return {
-            ...session,
-            messages: [...session.messages, aiMessage],
-            updatedAt: new Date().toISOString(),
-          };
-        }),
-      );
     } catch (error) {
       console.error("Chat request failed:", error);
 
       const errorMessage =
-        error.response?.data?.error ||
+        error.message ||
         "Unable to connect to the backend or Ollama. Please check that both services are running.";
 
       setSessions((previousSessions) =>
@@ -337,15 +528,27 @@ function App() {
             return session;
           }
 
+          const messages = [...session.messages];
+
+          const lastMessageIndex = messages.length - 1;
+
+          const lastMessage = messages[lastMessageIndex];
+
+          if (lastMessage?.role === "assistant") {
+            messages[lastMessageIndex] = {
+              ...lastMessage,
+              content: `**Error:** ${errorMessage}`,
+            };
+          } else {
+            messages.push({
+              role: "assistant",
+              content: `**Error:** ${errorMessage}`,
+            });
+          }
+
           return {
             ...session,
-            messages: [
-              ...session.messages,
-              {
-                role: "assistant",
-                content: `**Error:** ${errorMessage}`,
-              },
-            ],
+            messages,
             updatedAt: new Date().toISOString(),
           };
         }),
@@ -354,6 +557,10 @@ function App() {
       setLoading(false);
     }
   };
+
+  // =========================
+  // Edit Message
+  // =========================
 
   const handleEditMessage = async (messageIndex, newContent) => {
     const editedText = newContent.trim();
@@ -363,13 +570,19 @@ function App() {
     }
 
     const sessionId = activeSession.id;
+    const sessionMode = activeSession.mode;
 
     const updatedMessages = activeSession.messages
       .slice(0, messageIndex)
-      .concat({ role: "user", content: editedText });
+      .concat({
+        role: "user",
+        content: editedText,
+      });
 
     setLoading(true);
 
+    // Replace old conversation with edited message
+    // and prepare an empty assistant message
     setSessions((previousSessions) =>
       previousSessions.map((session) => {
         if (session.id !== sessionId) {
@@ -378,43 +591,63 @@ function App() {
 
         return {
           ...session,
-          messages: updatedMessages,
+
+          messages: [
+            ...updatedMessages,
+            {
+              role: "assistant",
+              content: "",
+            },
+          ],
+
           updatedAt: new Date().toISOString(),
         };
       }),
     );
 
     try {
-      const response = await axios.post(API_URL, {
+      await streamChatResponse({
         sessionId,
         message: editedText,
-        mode: activeSession.mode,
+        mode: sessionMode,
+        messages: updatedMessages,
+
+        onChunk: (content) => {
+          setSessions((previousSessions) =>
+            previousSessions.map((session) => {
+              if (session.id !== sessionId) {
+                return session;
+              }
+
+              const messages = [...session.messages];
+
+              const lastMessageIndex = messages.length - 1;
+
+              const lastMessage = messages[lastMessageIndex];
+
+              if (lastMessage?.role !== "assistant") {
+                return session;
+              }
+
+              messages[lastMessageIndex] = {
+                ...lastMessage,
+                content: `${lastMessage.content}${content}`,
+              };
+
+              return {
+                ...session,
+                messages,
+                updatedAt: new Date().toISOString(),
+              };
+            }),
+          );
+        },
       });
-
-      const aiMessage = {
-        role: "assistant",
-        content:
-          response.data.content || "No response was returned by the model.",
-      };
-
-      setSessions((previousSessions) =>
-        previousSessions.map((session) => {
-          if (session.id !== sessionId) {
-            return session;
-          }
-
-          return {
-            ...session,
-            messages: [...updatedMessages, aiMessage],
-            updatedAt: new Date().toISOString(),
-          };
-        }),
-      );
     } catch (error) {
       console.error("Edit chat request failed:", error);
 
       const errorMessage =
-        error.response?.data?.error ||
+        error.message ||
         "Unable to connect to the backend or Ollama. Please check that both services are running.";
 
       setSessions((previousSessions) =>
@@ -423,15 +656,22 @@ function App() {
             return session;
           }
 
+          const messages = [...session.messages];
+
+          const lastMessageIndex = messages.length - 1;
+
+          const lastMessage = messages[lastMessageIndex];
+
+          if (lastMessage?.role === "assistant") {
+            messages[lastMessageIndex] = {
+              ...lastMessage,
+              content: `**Error:** ${errorMessage}`,
+            };
+          }
+
           return {
             ...session,
-            messages: [
-              ...updatedMessages,
-              {
-                role: "assistant",
-                content: `**Error:** ${errorMessage}`,
-              },
-            ],
+            messages,
             updatedAt: new Date().toISOString(),
           };
         }),
@@ -441,12 +681,21 @@ function App() {
     }
   };
 
+  // =========================
+  // Keyboard
+  // =========================
+
   const handleKeyDown = (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
+
       handleSendMessage();
     }
   };
+
+  // =========================
+  // UI
+  // =========================
 
   return (
     <main style={themeStyles.page}>
