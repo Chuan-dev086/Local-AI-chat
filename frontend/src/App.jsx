@@ -123,6 +123,7 @@ function App() {
   const [loading, setLoading] = useState(false);
 
   const chatEndRef = useRef(null);
+  const abortRef = useRef(null);
 
   const themeStyles = getThemeStyles(theme);
 
@@ -316,6 +317,7 @@ function App() {
     mode,
     messages,
     onChunk,
+    signal,
   }) => {
     const response = await fetch(API_URL, {
       method: "POST",
@@ -330,6 +332,7 @@ function App() {
         mode,
         messages,
       }),
+      signal,
     });
 
     if (!response.ok) {
@@ -432,6 +435,13 @@ function App() {
       return;
     }
 
+    if (abortRef.current) {
+      return;
+    }
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     const sessionId = activeSession.id;
     const sessionMode = activeSession.mode;
 
@@ -483,6 +493,7 @@ function App() {
         message: userText,
         mode: sessionMode,
         messages: conversationMessages,
+        signal: controller.signal,
 
         onChunk: (content) => {
           setSessions((previousSessions) =>
@@ -516,44 +527,64 @@ function App() {
         },
       });
     } catch (error) {
-      console.error("Chat request failed:", error);
+      if (controller.signal.aborted) {
+        setSessions((previousSessions) =>
+          previousSessions.map((session) => {
+            if (session.id !== sessionId) return session;
 
-      const errorMessage =
-        error.message ||
-        "Unable to connect to the backend or Ollama. Please check that both services are running.";
+            const messages = [...session.messages];
+            const last = messages[messages.length - 1];
 
-      setSessions((previousSessions) =>
-        previousSessions.map((session) => {
-          if (session.id !== sessionId) {
-            return session;
-          }
+            if (last?.role === "assistant" && !last.content) {
+              messages.pop();
+            }
 
-          const messages = [...session.messages];
-
-          const lastMessageIndex = messages.length - 1;
-
-          const lastMessage = messages[lastMessageIndex];
-
-          if (lastMessage?.role === "assistant") {
-            messages[lastMessageIndex] = {
-              ...lastMessage,
-              content: `**Error:** ${errorMessage}`,
+            return {
+              ...session,
+              messages,
+              updatedAt: new Date().toISOString(),
             };
-          } else {
-            messages.push({
-              role: "assistant",
-              content: `**Error:** ${errorMessage}`,
-            });
-          }
+          }),
+        );
+      } else {
+        console.error("Chat request failed:", error);
 
-          return {
-            ...session,
-            messages,
-            updatedAt: new Date().toISOString(),
-          };
-        }),
-      );
+        const errorMessage =
+          error.message ||
+          "Unable to connect to the backend or Ollama. Please check that both services are running.";
+
+        setSessions((previousSessions) =>
+          previousSessions.map((session) => {
+            if (session.id !== sessionId) {
+              return session;
+            }
+
+            const messages = [...session.messages];
+            const lastMessageIndex = messages.length - 1;
+            const lastMessage = messages[lastMessageIndex];
+
+            if (lastMessage?.role === "assistant") {
+              messages[lastMessageIndex] = {
+                ...lastMessage,
+                content: `**Error:** ${errorMessage}`,
+              };
+            } else {
+              messages.push({
+                role: "assistant",
+                content: `**Error:** ${errorMessage}`,
+              });
+            }
+
+            return {
+              ...session,
+              messages,
+              updatedAt: new Date().toISOString(),
+            };
+          }),
+        );
+      }
     } finally {
+      abortRef.current = null; // ← 新增
       setLoading(false);
     }
   };
@@ -569,6 +600,13 @@ function App() {
       return;
     }
 
+    if (abortRef.current) {
+      return;
+    }
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     const sessionId = activeSession.id;
     const sessionMode = activeSession.mode;
 
@@ -581,8 +619,6 @@ function App() {
 
     setLoading(true);
 
-    // Replace old conversation with edited message
-    // and prepare an empty assistant message
     setSessions((previousSessions) =>
       previousSessions.map((session) => {
         if (session.id !== sessionId) {
@@ -591,7 +627,6 @@ function App() {
 
         return {
           ...session,
-
           messages: [
             ...updatedMessages,
             {
@@ -599,7 +634,6 @@ function App() {
               content: "",
             },
           ],
-
           updatedAt: new Date().toISOString(),
         };
       }),
@@ -611,6 +645,7 @@ function App() {
         message: editedText,
         mode: sessionMode,
         messages: updatedMessages,
+        signal: controller.signal,
 
         onChunk: (content) => {
           setSessions((previousSessions) =>
@@ -620,9 +655,7 @@ function App() {
               }
 
               const messages = [...session.messages];
-
               const lastMessageIndex = messages.length - 1;
-
               const lastMessage = messages[lastMessageIndex];
 
               if (lastMessage?.role !== "assistant") {
@@ -644,41 +677,70 @@ function App() {
         },
       });
     } catch (error) {
-      console.error("Edit chat request failed:", error);
+      if (controller.signal.aborted) {
+        // ← 新增分支
+        setSessions((previousSessions) =>
+          previousSessions.map((session) => {
+            if (session.id !== sessionId) return session;
 
-      const errorMessage =
-        error.message ||
-        "Unable to connect to the backend or Ollama. Please check that both services are running.";
+            const messages = [...session.messages];
+            const last = messages[messages.length - 1];
 
-      setSessions((previousSessions) =>
-        previousSessions.map((session) => {
-          if (session.id !== sessionId) {
-            return session;
-          }
+            if (last?.role === "assistant" && !last.content) {
+              messages.pop();
+            }
 
-          const messages = [...session.messages];
-
-          const lastMessageIndex = messages.length - 1;
-
-          const lastMessage = messages[lastMessageIndex];
-
-          if (lastMessage?.role === "assistant") {
-            messages[lastMessageIndex] = {
-              ...lastMessage,
-              content: `**Error:** ${errorMessage}`,
+            return {
+              ...session,
+              messages,
+              updatedAt: new Date().toISOString(),
             };
-          }
+          }),
+        );
+      } else {
+        console.error("Edit chat request failed:", error);
 
-          return {
-            ...session,
-            messages,
-            updatedAt: new Date().toISOString(),
-          };
-        }),
-      );
+        const errorMessage =
+          error.message ||
+          "Unable to connect to the backend or Ollama. Please check that both services are running.";
+
+        setSessions((previousSessions) =>
+          previousSessions.map((session) => {
+            if (session.id !== sessionId) {
+              return session;
+            }
+
+            const messages = [...session.messages];
+            const lastMessageIndex = messages.length - 1;
+            const lastMessage = messages[lastMessageIndex];
+
+            if (lastMessage?.role === "assistant") {
+              messages[lastMessageIndex] = {
+                ...lastMessage,
+                content: `**Error:** ${errorMessage}`,
+              };
+            }
+
+            return {
+              ...session,
+              messages,
+              updatedAt: new Date().toISOString(),
+            };
+          }),
+        );
+      }
     } finally {
+      abortRef.current = null;
       setLoading(false);
     }
+  };
+
+  // =========================
+  // Stop Generation
+  // =========================
+
+  const handleStop = () => {
+    abortRef.current?.abort();
   };
 
   // =========================
@@ -738,6 +800,7 @@ function App() {
             onInputChange={setInput}
             onKeyDown={handleKeyDown}
             onSendMessage={handleSendMessage}
+            onStop={handleStop}
           />
         </div>
       </section>

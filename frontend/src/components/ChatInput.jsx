@@ -11,6 +11,7 @@ function ChatInput({
   onInputChange,
   onKeyDown,
   onSendMessage,
+  onStop,
 }) {
   const isInputEmpty = !input.trim();
   const styles = getChatInputStyles(theme, loading, isInputEmpty);
@@ -36,15 +37,27 @@ function ChatInput({
           sx={styles.textFieldSx}
         />
 
-        <Button
-          type="button"
-          onClick={onSendMessage}
-          disabled={loading || isInputEmpty}
-          variant="contained"
-          sx={styles.sendBtnSx}
-        >
-          {loading ? "Thinking…" : "Send"}
-        </Button>
+        {loading ? (
+          <Button
+            type="button"
+            onClick={onStop}
+            variant="outlined"
+            color="error"
+            sx={styles.sendBtnSx}
+          >
+            Stop
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            onClick={onSendMessage}
+            disabled={isInputEmpty}
+            variant="contained"
+            sx={styles.sendBtnSx}
+          >
+            Send
+          </Button>
+        )}
       </div>
 
       <p style={styles.tipText}>
