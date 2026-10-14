@@ -15,7 +15,9 @@ function ChatHeader({
   activeSession,
   loading,
   theme,
+  models,
   onModeChange,
+  onModelChange,
   onRenameSession,
   onToggleTheme,
 }) {
@@ -54,6 +56,34 @@ function ChatHeader({
           >
             <MenuItem value="chat">General Chat</MenuItem>
             <MenuItem value="code">Programming Assistant</MenuItem>
+          </Select>
+        </FormControl>
+
+        <FormControl size="small" sx={styles.formControlSx}>
+          <InputLabel id="model-select-label" sx={styles.inputLabelSx}>
+            Model
+          </InputLabel>
+
+          <Select
+            labelId="model-select-label"
+            id="model-select"
+            value={activeSession?.model || ""}
+            onChange={onModelChange}
+            disabled={loading || models.length === 0}
+            label="Model"
+            sx={styles.selectSx}
+          >
+            {models.length === 0 ? (
+              <MenuItem value="" disabled>
+                No models found
+              </MenuItem>
+            ) : (
+              models.map((name) => (
+                <MenuItem key={name} value={name}>
+                  {name}
+                </MenuItem>
+              ))
+            )}
           </Select>
         </FormControl>
 

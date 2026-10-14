@@ -10,7 +10,8 @@ app.use(express.json());
 const PORT = 5000;
 const OLLAMA_URL = "http://localhost:11434";
 
-const MODELS = {
+// 用户没主动选模型时，各模式的默认值
+const DEFAULT_MODELS = {
   chat: "llama3.2:3b",
   code: "qwen2.5-coder:3b",
 };
@@ -108,11 +109,41 @@ app.get("/api/health", (req, res) => {
 });
 
 // ========================================
+// List Available Models (from Ollama)
+// ========================================
+
+app.get("/api/models", async (req, res) => {
+  try {
+    const response = await axios.get(`${OLLAMA_URL}/api/tags`, {
+      timeout: 5000,
+    });
+
+    const models = (response.data.models || [])
+      .map((m) => m.name)
+      .filter(Boolean)
+      .sort();
+
+    res.json({ models });
+  } catch (error) {
+    console.error("[Models] failed to fetch:", error.message);
+    res.status(500).json({
+      error: "Failed to fetch model list from Ollama.",
+    });
+  }
+});
+
+// ========================================
 // Chat API
 // ========================================
 
 app.post("/api/chat", async (req, res) => {
-  const { sessionId, message, mode = "chat", messages = [] } = req.body;
+  const {
+    sessionId,
+    message,
+    mode = "chat",
+    messages = [],
+    model: requestedModel,
+  } = req.body;
 
   // ========================================
   // Validation
@@ -138,7 +169,11 @@ app.post("/api/chat", async (req, res) => {
 
   const normalizedMode = mode === "code" ? "code" : "chat";
 
-  const selectedModel = MODELS[normalizedMode];
+  // 用户传了 model 就用用户的；否则回退到该模式的默认模型
+  const selectedModel =
+    typeof requestedModel === "string" && requestedModel.trim()
+      ? requestedModel.trim()
+      : DEFAULT_MODELS[normalizedMode];
 
   // ========================================
   // Save lightweight session metadata

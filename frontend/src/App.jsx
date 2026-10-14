@@ -6,9 +6,17 @@ import MessageList from "./components/MessageList";
 import ChatInput from "./components/ChatInput";
 import { getThemeStyles } from "./theme/theme";
 
-const API_URL = "http://localhost:5000/api/chat";
+const API_BASE = "http://localhost:5000/api";
+const API_URL = `${API_BASE}/chat`;
+const MODELS_API_URL = `${API_BASE}/models`;
 const STORAGE_KEY = "local_ai_chat_sessions_v2";
 const THEME_KEY = "local_ai_chat_theme";
+
+// 必须和后端 DEFAULT_MODELS 保持一致
+const DEFAULT_MODELS = {
+  chat: "llama3.2:3b",
+  code: "qwen2.5-coder:3b",
+};
 
 function generateSessionId() {
   if (crypto.randomUUID) {
@@ -25,6 +33,7 @@ function createNewSession(mode = "chat") {
     id: generateSessionId(),
     title: "New Chat",
     mode,
+    model: DEFAULT_MODELS[mode] || DEFAULT_MODELS.chat,
     messages: [],
     createdAt: now,
     updatedAt: now,
@@ -71,14 +80,20 @@ function getInitialChatState() {
       return fallbackState;
     }
 
-    const normalizedSessions = parsedData.sessions.map((session) => ({
-      id: session.id || generateSessionId(),
-      title: session.title || "New Chat",
-      mode: session.mode === "code" ? "code" : "chat",
-      messages: Array.isArray(session.messages) ? session.messages : [],
-      createdAt: session.createdAt || new Date().toISOString(),
-      updatedAt: session.updatedAt || new Date().toISOString(),
-    }));
+    const normalizedSessions = parsedData.sessions.map((session) => {
+      const safeMode = session.mode === "code" ? "code" : "chat";
+
+      return {
+        id: session.id || generateSessionId(),
+        title: session.title || "New Chat",
+        mode: safeMode,
+        // 老数据没有 model 字段时，自动补上默认模型
+        model: session.model || DEFAULT_MODELS[safeMode],
+        messages: Array.isArray(session.messages) ? session.messages : [],
+        createdAt: session.createdAt || new Date().toISOString(),
+        updatedAt: session.updatedAt || new Date().toISOString(),
+      };
+    });
 
     const activeSessionExists = normalizedSessions.some(
       (session) => session.id === parsedData.activeSessionId,
@@ -121,6 +136,7 @@ function App() {
 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [models, setModels] = useState([]);
 
   const chatEndRef = useRef(null);
   const abortRef = useRef(null);
@@ -154,6 +170,36 @@ function App() {
   useEffect(() => {
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
+
+  // =========================
+  // Fetch Available Models
+  // =========================
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchModels = async () => {
+      try {
+        const response = await fetch(MODELS_API_URL);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        if (!cancelled && Array.isArray(data.models)) {
+          setModels(data.models);
+        }
+      } catch (error) {
+        console.error("Failed to fetch model list:", error);
+        // 静默失败即可：用户仍可用默认模型
+      }
+    };
+
+    fetchModels();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // =========================
   // Auto Scroll
@@ -300,9 +346,30 @@ function App() {
   const handleModeChange = (event) => {
     const newMode = event.target.value;
 
+    updateActiveSession((session) => {
+      const oldDefault = DEFAULT_MODELS[session.mode];
+      // 只有当用户没手动改过模型（还是旧默认值）时，才自动切到新默认
+      const usingOldDefault = !session.model || session.model === oldDefault;
+
+      return {
+        ...session,
+        mode: newMode,
+        model: usingOldDefault ? DEFAULT_MODELS[newMode] : session.model,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+  };
+
+  // =========================
+  // Change Model
+  // =========================
+
+  const handleModelChange = (event) => {
+    const newModel = event.target.value;
+
     updateActiveSession((session) => ({
       ...session,
-      mode: newMode,
+      model: newModel,
       updatedAt: new Date().toISOString(),
     }));
   };
@@ -315,21 +382,21 @@ function App() {
     sessionId,
     message,
     mode,
+    model,
     messages,
     onChunk,
     signal,
   }) => {
     const response = await fetch(API_URL, {
       method: "POST",
-
       headers: {
         "Content-Type": "application/json",
       },
-
       body: JSON.stringify({
         sessionId,
         message,
         mode,
+        model,
         messages,
       }),
       signal,
@@ -492,6 +559,7 @@ function App() {
         sessionId,
         message: userText,
         mode: sessionMode,
+        model: activeSession.model,
         messages: conversationMessages,
         signal: controller.signal,
 
@@ -644,6 +712,7 @@ function App() {
         sessionId,
         message: editedText,
         mode: sessionMode,
+        model: activeSession.model,
         messages: updatedMessages,
         signal: controller.signal,
 
@@ -777,7 +846,9 @@ function App() {
             activeSession={activeSession}
             loading={loading}
             theme={theme}
+            models={models}
             onModeChange={handleModeChange}
+            onModelChange={handleModelChange}
             onRenameSession={handleRenameSession}
             onToggleTheme={toggleTheme}
           />
