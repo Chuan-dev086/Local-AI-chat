@@ -910,6 +910,7 @@ function App() {
         open={isSystemPromptOpen}
         initialValue={activeSession?.systemPrompt || ""}
         mode={activeSession?.mode || "chat"}
+        theme={theme}
         onClose={handleCloseSystemPrompt}
         onSave={handleSaveSystemPrompt}
       />
