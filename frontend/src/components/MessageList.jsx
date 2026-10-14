@@ -1,6 +1,6 @@
 // src/components/MessageList.jsx
 
-import { getMessageListStyles, getThemeStyles } from "../theme/theme";
+import { getMessageListStyles } from "../theme/theme";
 import MessageBubble from "./MessageBubble";
 
 function MessageList({
@@ -10,7 +10,6 @@ function MessageList({
   theme,
   onEditMessage,
 }) {
-  const { messagesArea } = getThemeStyles(theme);
   const styles = getMessageListStyles(theme);
 
   const emptyMessage =
@@ -19,11 +18,7 @@ function MessageList({
       : "Start a new conversation.";
 
   return (
-    <div
-      style={{
-        messagesArea,
-      }}
-    >
+    <>
       {activeSession?.messages.length === 0 && (
         <div style={styles.emptyContainer}>
           <div>
@@ -53,7 +48,7 @@ function MessageList({
       )}
 
       <div ref={chatEndRef} />
-    </div>
+    </>
   );
 }
 

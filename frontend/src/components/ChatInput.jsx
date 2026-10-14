@@ -17,7 +17,7 @@ function ChatInput({
   const styles = getChatInputStyles(theme, loading, isInputEmpty);
 
   return (
-    <div style={styles.container}>
+    <>
       <div style={styles.inputWrapper}>
         <TextField
           value={input}
@@ -63,7 +63,7 @@ function ChatInput({
       <p style={styles.tipText}>
         Press Enter to send. Use Shift + Enter for a new line.
       </p>
-    </div>
+    </>
   );
 }
 

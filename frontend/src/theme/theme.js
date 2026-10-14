@@ -1,5 +1,6 @@
 // src/theme/theme.js
 
+// light mode
 export const lightColors = {
   bg: "#f8fafc",
   containerBg: "#ffffff",
@@ -24,6 +25,7 @@ export const lightColors = {
   linkColor: "#2563eb",
 };
 
+// dark mode
 export const darkColors = {
   bg: "#0f172a",
   containerBg: "#1e293b",
@@ -56,7 +58,6 @@ export const layoutStyles = {
   page: {
     width: "100vw",
     height: "100vh",
-    padding: "24px",
     boxSizing: "border-box",
     fontFamily:
       'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
@@ -67,13 +68,9 @@ export const layoutStyles = {
   container: {
     display: "flex",
     width: "100%",
-    maxWidth: 1240,
     height: "100%",
-    margin: "0 auto",
     overflow: "hidden",
-    borderRadius: 16,
-    transition:
-      "background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease",
+    transition: "background-color 0.3s ease, border-color 0.3s ease",
   },
 
   sidebar: {
@@ -99,14 +96,24 @@ export const layoutStyles = {
     flex: 1,
     minHeight: 0,
     overflowY: "auto",
-    padding: "18px 20px",
     transition: "background-color 0.3s ease",
   },
 
+  messagesInner: {
+    maxWidth: 820,
+    margin: "0 auto",
+    padding: "24px 20px 12px",
+  },
+
   inputArea: {
-    padding: "14px 20px 16px",
     flexShrink: 0,
     transition: "background-color 0.3s ease",
+  },
+
+  inputInner: {
+    maxWidth: 820,
+    margin: "0 auto",
+    padding: "12px 20px 16px",
   },
 };
 
@@ -133,11 +140,7 @@ export const getThemeStyles = (theme) => {
 
     container: {
       ...layoutStyles.container,
-      border: `1px solid ${colors.border}`,
       backgroundColor: colors.containerBg,
-      boxShadow: isDark
-        ? shadowStyles.darkContainer
-        : shadowStyles.lightContainer,
     },
 
     sidebar: {
@@ -156,10 +159,18 @@ export const getThemeStyles = (theme) => {
       backgroundColor: colors.bg,
     },
 
+    messagesInner: {
+      ...layoutStyles.messagesInner,
+    },
+
     inputArea: {
       ...layoutStyles.inputArea,
       borderTop: `1px solid ${colors.border}`,
       backgroundColor: colors.inputBg,
+    },
+
+    inputInner: {
+      ...layoutStyles.inputInner,
     },
   };
 };
@@ -450,12 +461,10 @@ export const getChatHeaderStyles = (theme) => {
 };
 
 export const getChatInputStyles = (theme, loading, isInputEmpty) => {
-  const { colors, inputArea } = getThemeStyles(theme);
+  const { colors } = getThemeStyles(theme);
 
   return {
-    container: {
-      ...inputArea,
-    },
+    container: {},
     inputWrapper: {
       display: "flex",
       gap: 10,

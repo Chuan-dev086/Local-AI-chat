@@ -884,25 +884,31 @@ function App() {
           />
 
           <div style={themeStyles.messagesArea}>
-            <MessageList
-              activeSession={activeSession}
-              loading={loading}
-              chatEndRef={chatEndRef}
-              theme={theme}
-              onEditMessage={handleEditMessage}
-            />
+            <div style={themeStyles.messagesInner}>
+              <MessageList
+                activeSession={activeSession}
+                loading={loading}
+                chatEndRef={chatEndRef}
+                theme={theme}
+                onEditMessage={handleEditMessage}
+              />
+            </div>
           </div>
 
-          <ChatInput
-            input={input}
-            loading={loading}
-            activeSession={activeSession}
-            theme={theme}
-            onInputChange={setInput}
-            onKeyDown={handleKeyDown}
-            onSendMessage={handleSendMessage}
-            onStop={handleStop}
-          />
+          <div style={themeStyles.inputArea}>
+            <div style={themeStyles.inputInner}>
+              <ChatInput
+                input={input}
+                loading={loading}
+                activeSession={activeSession}
+                theme={theme}
+                onInputChange={setInput}
+                onKeyDown={handleKeyDown}
+                onSendMessage={handleSendMessage}
+                onStop={handleStop}
+              />
+            </div>
+          </div>
         </div>
       </section>
       <SystemPromptDialog
