@@ -8,7 +8,7 @@ import {
   MenuItem,
   Select,
 } from "@mui/material";
-import { Brightness4, Brightness7 } from "@mui/icons-material";
+import { DarkMode, LightMode, Settings } from "@mui/icons-material";
 import { getChatHeaderStyles, getThemeStyles } from "../theme/theme";
 
 function ChatHeader({
@@ -20,6 +20,7 @@ function ChatHeader({
   onModelChange,
   onRenameSession,
   onToggleTheme,
+  onOpenSystemPrompt,
 }) {
   const { isDark } = getThemeStyles(theme);
   const styles = getChatHeaderStyles(theme);
@@ -99,6 +100,16 @@ function ChatHeader({
         </Button>
 
         <IconButton
+          onClick={onOpenSystemPrompt}
+          disabled={loading}
+          size="small"
+          sx={styles.themeToggleBtnSx}
+          title="Edit system prompt"
+        >
+          <Settings sx={{ fontSize: "1.25rem" }} />
+        </IconButton>
+
+        <IconButton
           onClick={onToggleTheme}
           disabled={loading}
           size="small"
@@ -106,9 +117,9 @@ function ChatHeader({
           title={isDark ? "Switch to light mode" : "Switch to dark mode"}
         >
           {isDark ? (
-            <Brightness7 sx={{ fontSize: "1.25rem" }} />
+            <LightMode sx={{ fontSize: "1.25rem" }} />
           ) : (
-            <Brightness4 sx={{ fontSize: "1.25rem" }} />
+            <DarkMode sx={{ fontSize: "1.25rem" }} />
           )}
         </IconButton>
       </div>

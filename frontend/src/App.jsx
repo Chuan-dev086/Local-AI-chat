@@ -5,6 +5,7 @@ import ChatHeader from "./components/ChatHeader";
 import MessageList from "./components/MessageList";
 import ChatInput from "./components/ChatInput";
 import { getThemeStyles } from "./theme/theme";
+import SystemPromptDialog from "./components/SystemPromptDialog";
 
 const API_BASE = "http://localhost:5000/api";
 const API_URL = `${API_BASE}/chat`;
@@ -34,6 +35,7 @@ function createNewSession(mode = "chat") {
     title: "New Chat",
     mode,
     model: DEFAULT_MODELS[mode] || DEFAULT_MODELS.chat,
+    systemPrompt: "",
     messages: [],
     createdAt: now,
     updatedAt: now,
@@ -89,6 +91,8 @@ function getInitialChatState() {
         mode: safeMode,
         // 老数据没有 model 字段时，自动补上默认模型
         model: session.model || DEFAULT_MODELS[safeMode],
+        systemPrompt:
+          typeof session.systemPrompt === "string" ? session.systemPrompt : "",
         messages: Array.isArray(session.messages) ? session.messages : [],
         createdAt: session.createdAt || new Date().toISOString(),
         updatedAt: session.updatedAt || new Date().toISOString(),
@@ -133,10 +137,10 @@ function App() {
   const [activeSessionId, setActiveSessionId] = useState(
     initialChatState.activeSessionId,
   );
-
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [models, setModels] = useState([]);
+  const [isSystemPromptOpen, setIsSystemPromptOpen] = useState(false);
 
   const chatEndRef = useRef(null);
   const abortRef = useRef(null);
@@ -374,6 +378,27 @@ function App() {
     }));
   };
 
+  // =========================
+  // System Prompt Dialog
+  // =========================
+
+  const handleOpenSystemPrompt = () => {
+    if (loading) return;
+    setIsSystemPromptOpen(true);
+  };
+
+  const handleCloseSystemPrompt = () => {
+    setIsSystemPromptOpen(false);
+  };
+
+  const handleSaveSystemPrompt = (text) => {
+    updateActiveSession((session) => ({
+      ...session,
+      systemPrompt: text,
+      updatedAt: new Date().toISOString(),
+    }));
+  };
+
   // ============================================================
   // Streaming Helper
   // ============================================================
@@ -383,6 +408,7 @@ function App() {
     message,
     mode,
     model,
+    systemPrompt,
     messages,
     onChunk,
     signal,
@@ -397,6 +423,7 @@ function App() {
         message,
         mode,
         model,
+        systemPrompt,
         messages,
       }),
       signal,
@@ -560,6 +587,7 @@ function App() {
         message: userText,
         mode: sessionMode,
         model: activeSession.model,
+        systemPrompt: activeSession.systemPrompt,
         messages: conversationMessages,
         signal: controller.signal,
 
@@ -713,6 +741,7 @@ function App() {
         message: editedText,
         mode: sessionMode,
         model: activeSession.model,
+        systemPrompt: activeSession.systemPrompt,
         messages: updatedMessages,
         signal: controller.signal,
 
@@ -847,6 +876,7 @@ function App() {
             loading={loading}
             theme={theme}
             models={models}
+            onOpenSystemPrompt={handleOpenSystemPrompt}
             onModeChange={handleModeChange}
             onModelChange={handleModelChange}
             onRenameSession={handleRenameSession}
@@ -875,6 +905,14 @@ function App() {
           />
         </div>
       </section>
+      <SystemPromptDialog
+        key={`${activeSession?.id}-${isSystemPromptOpen ? "open" : "closed"}`}
+        open={isSystemPromptOpen}
+        initialValue={activeSession?.systemPrompt || ""}
+        mode={activeSession?.mode || "chat"}
+        onClose={handleCloseSystemPrompt}
+        onSave={handleSaveSystemPrompt}
+      />
     </main>
   );
 }

@@ -143,6 +143,7 @@ app.post("/api/chat", async (req, res) => {
     mode = "chat",
     messages = [],
     model: requestedModel,
+    systemPrompt: customSystemPrompt,
   } = req.body;
 
   // ========================================
@@ -188,9 +189,14 @@ app.post("/api/chat", async (req, res) => {
   // Prepare System Message
   // ========================================
 
+  const customPrompt =
+    typeof customSystemPrompt === "string"
+      ? customSystemPrompt.trim().slice(0, 8000)
+      : "";
+
   const systemMessage = {
     role: "system",
-    content: SYSTEM_PROMPTS[normalizedMode],
+    content: customPrompt || SYSTEM_PROMPTS[normalizedMode],
   };
 
   // ========================================
@@ -222,7 +228,7 @@ app.post("/api/chat", async (req, res) => {
   console.log("");
   console.log(
     `${c.cyan}${c.bold}▶ [${timeStamp()}] ${selectedModel}${c.reset}` +
-      `${c.dim} | mode=${normalizedMode} | ctx=${recentMessages.length}/${validMessages.length} msgs | session=${sessionId.slice(0, 16)}...${c.reset}`,
+      `${c.dim} | mode=${normalizedMode} | ctx=${recentMessages.length}/${validMessages.length} msgs | session=${sessionId.slice(0, 16)}...${customPrompt ? ` | ${c.magenta}custom-prompt${c.dim}` : ""}${c.reset}`,
   );
 
   try {
