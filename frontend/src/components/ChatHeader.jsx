@@ -8,7 +8,12 @@ import {
   MenuItem,
   Select,
 } from "@mui/material";
-import { DarkMode, LightMode, Settings } from "@mui/icons-material";
+import {
+  DarkMode,
+  LightMode,
+  Settings,
+  Menu as MenuIcon,
+} from "@mui/icons-material";
 import { getChatHeaderStyles, getThemeStyles } from "../theme/theme";
 
 function ChatHeader({
@@ -16,6 +21,7 @@ function ChatHeader({
   loading,
   theme,
   models,
+  onToggleSidebar,
   onModeChange,
   onModelChange,
   onRenameSession,
@@ -32,12 +38,31 @@ function ChatHeader({
 
   return (
     <header style={styles.header}>
-      <div style={styles.titleContainer}>
-        <h1 title={activeSession?.title} style={styles.title}>
-          {activeSession?.title || "New Chat"}
-        </h1>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          minWidth: 0,
+          flex: 1,
+        }}
+      >
+        <IconButton
+          onClick={onToggleSidebar}
+          size="small"
+          sx={styles.themeToggleBtnSx}
+          title="Toggle sidebar"
+        >
+          <MenuIcon sx={{ fontSize: "1.25rem" }} />
+        </IconButton>
 
-        <p style={styles.subtitle}>{pageTitle}</p>
+        <div style={styles.titleContainer}>
+          <h1 title={activeSession?.title} style={styles.title}>
+            {activeSession?.title || "New Chat"}
+          </h1>
+
+          <p style={styles.subtitle}>{pageTitle}</p>
+        </div>
       </div>
 
       <div style={styles.actionsContainer}>

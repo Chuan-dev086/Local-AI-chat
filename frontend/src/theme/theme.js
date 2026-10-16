@@ -295,12 +295,24 @@ export const getMessageListStyles = (theme) => {
   };
 };
 
-export const getSidebarStyles = (theme) => {
+export const getSidebarStyles = (theme, collapsed) => {
   const { colors, sidebar } = getThemeStyles(theme);
 
   return {
     aside: {
       ...sidebar,
+      borderRight: "none",
+      width: collapsed ? 0 : 270,
+      overflow: "hidden",
+      transition: "width 0.25s ease, background-color 0.3s ease",
+    },
+    inner: {
+      display: "flex",
+      flexDirection: "column",
+      width: 270,
+      minWidth: 270,
+      height: "100%",
+      borderRight: `1px solid ${colors.border}`,
     },
     header: {
       padding: 16,

@@ -12,6 +12,7 @@ const API_URL = `${API_BASE}/chat`;
 const MODELS_API_URL = `${API_BASE}/models`;
 const STORAGE_KEY = "local_ai_chat_sessions_v2";
 const THEME_KEY = "local_ai_chat_theme";
+const SIDEBAR_KEY = "local_ai_chat_sidebar_collapsed";
 
 // 必须和后端 DEFAULT_MODELS 保持一致
 const DEFAULT_MODELS = {
@@ -132,6 +133,13 @@ function getInitialTheme() {
 function App() {
   const [initialChatState] = useState(getInitialChatState);
   const [theme, setTheme] = useState(getInitialTheme());
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
 
   const [sessions, setSessions] = useState(initialChatState.sessions);
   const [activeSessionId, setActiveSessionId] = useState(
@@ -174,6 +182,14 @@ function App() {
   useEffect(() => {
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_KEY, String(sidebarCollapsed));
+    } catch {
+      // ignore
+    }
+  }, [sidebarCollapsed]);
 
   // =========================
   // Fetch Available Models
@@ -222,6 +238,10 @@ function App() {
 
   const toggleTheme = () => {
     setTheme((previousTheme) => (previousTheme === "light" ? "dark" : "light"));
+  };
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((prev) => !prev);
   };
 
   // =========================
@@ -865,6 +885,7 @@ function App() {
           activeSessionId={activeSessionId}
           loading={loading}
           theme={theme}
+          collapsed={sidebarCollapsed}
           onNewChat={handleNewChat}
           onSelectSession={handleSelectSession}
           onDeleteSession={handleDeleteSession}
@@ -876,6 +897,7 @@ function App() {
             loading={loading}
             theme={theme}
             models={models}
+            onToggleSidebar={toggleSidebar}
             onOpenSystemPrompt={handleOpenSystemPrompt}
             onModeChange={handleModeChange}
             onModelChange={handleModelChange}
