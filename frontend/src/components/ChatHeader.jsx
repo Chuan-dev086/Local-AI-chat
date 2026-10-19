@@ -21,6 +21,7 @@ import {
   Check,
   Settings,
   DriveFileRenameOutline,
+  Download,
 } from "@mui/icons-material";
 import { getChatHeaderStyles, getThemeStyles } from "../theme/theme";
 
@@ -61,6 +62,33 @@ function ChatHeader({
 
   const handleMenuClose = () => {
     setMenuAnchor(null);
+  };
+
+  const handleExportMarkdown = () => {
+    if (!activeSession || activeSession.messages.length === 0) return;
+
+    // 拼装 Markdown 格式
+    let markdown = `# ${activeSession.title}\n\n`;
+    markdown += `*Exported on ${new Date().toLocaleString()}*\n\n---\n\n`;
+
+    activeSession.messages.forEach((msg) => {
+      const role = msg.role === "user" ? "### 👤 User" : "### 🤖 Assistant";
+      markdown += `${role}\n\n${msg.content}\n\n---\n\n`;
+    });
+
+    // 生成文件并触发下载
+    const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    // 处理文件名，去掉非法字符
+    a.download = `${activeSession.title.replace(/[/\\?%*:|"<>]/g, "-")}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    handleMenuClose();
   };
 
   // 伪造 event 对象，复用父组件逻辑
@@ -233,6 +261,12 @@ function ChatHeader({
               <DriveFileRenameOutline fontSize="small" />
             </ListItemIcon>
             <ListItemText primary="Rename Chat" />
+          </MenuItem>
+          <MenuItem onClick={handleExportMarkdown}>
+            <ListItemIcon sx={{ minWidth: 32 }}>
+              <Download fontSize="small" />
+            </ListItemIcon>
+            <ListItemText primary="Export Markdown" />
           </MenuItem>
         </Menu>
       </header>
