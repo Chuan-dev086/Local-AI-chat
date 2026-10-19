@@ -426,6 +426,23 @@ export const getChatHeaderStyles = (theme) => {
       gap: 8,
       flexWrap: "wrap",
     },
+    modelMenuBtnsx: {
+      color: colors.text,
+      backgroundColor: colors.inputBg,
+      border: `1px solid ${colors.border}`,
+      textTransform: "none",
+      fontWeight: 500,
+      fontSize: "0.9rem",
+      padding: "5px 10px",
+      borderRadius: "8px",
+      "&:hover": {
+        backgroundColor: getToggleHoverColor(theme),
+        borderColor: colors.buttonBg,
+      },
+      "& .MuiSvgIcon-root": {
+        color: colors.text,
+      },
+    },
     formControlSx: {
       minWidth: 140,
     },
