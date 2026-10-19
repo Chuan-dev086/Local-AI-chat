@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import {
-  Button,
+  Box,
   IconButton,
   Menu,
   MenuItem,
@@ -104,14 +104,13 @@ function ChatHeader({
 
         {/* 右侧：模型按钮 + 主题切换 */}
         <div style={styles.actionsContainer}>
-          <Button
-            onClick={handleMenuOpen}
-            endIcon={<ArrowDropDown />}
+          <Box
+            onClick={loading ? undefined : handleMenuOpen}
             sx={styles.modelMenuBtnSx}
-            disabled={loading}
           >
-            {activeSession?.model || "Select Model"}
-          </Button>
+            <span>{activeSession?.model || "Select Model"}</span>
+            <ArrowDropDown fontSize="small" />
+          </Box>
 
           <IconButton
             onClick={onToggleTheme}

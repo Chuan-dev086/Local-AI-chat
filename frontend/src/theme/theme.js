@@ -426,21 +426,23 @@ export const getChatHeaderStyles = (theme) => {
       gap: 8,
       flexWrap: "wrap",
     },
-    modelMenuBtnsx: {
+    modelMenuBtnSx: {
+      display: "flex",
+      alignItems: "center",
+      gap: 0.5,
       color: colors.text,
       backgroundColor: colors.inputBg,
       border: `1px solid ${colors.border}`,
-      textTransform: "none",
       fontWeight: 500,
-      fontSize: "0.9rem",
-      padding: "5px 10px",
+      fontSize: "0.85rem",
+      padding: "4px 10px",
       borderRadius: "8px",
+      cursor: "pointer",
+      userSelect: "none",
+      transition: "all 0.2s ease",
       "&:hover": {
         backgroundColor: getToggleHoverColor(theme),
-        borderColor: colors.buttonBg,
-      },
-      "& .MuiSvgIcon-root": {
-        color: colors.text,
+        borderColor: colors.border,
       },
     },
     formControlSx: {
