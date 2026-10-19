@@ -2,11 +2,50 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Button, TextField } from "@mui/material";
+import { Button, TextField, Tooltip } from "@mui/material";
+import { ContentCopy, Edit, Refresh, Check } from "@mui/icons-material";
 import { getMessageBubbleStyles, getThemeStyles } from "../theme/theme";
 import CopyButton from "./CopyButton";
 
-function MessageBubble({ message, theme, index, onEditMessage }) {
+// 格式化相对时间
+function formatRelativeTime(dateString) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now - date) / 1000);
+
+  if (diffInSeconds < 60) return "just now";
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours}h ago`;
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 30) return `${diffInDays}d ago`;
+  return date.toLocaleDateString();
+}
+
+// 格式化精确时间
+function formatFullTime(dateString) {
+  if (!dateString) return "";
+  return new Date(dateString).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function MessageBubble({
+  message,
+  theme,
+  index,
+  isLast,
+  loading,
+  onEditMessage,
+  onRegenerate,
+}) {
   const { isDark, colors } = getThemeStyles(theme);
   const isUser = message.role === "user";
   const styles = getMessageBubbleStyles(theme, isUser);
@@ -15,7 +54,6 @@ function MessageBubble({ message, theme, index, onEditMessage }) {
   const [editText, setEditText] = useState(message.content);
   const [copied, setCopied] = useState(false);
 
-  // copy message function
   const handleCopyMessage = async () => {
     try {
       await navigator.clipboard.writeText(message.content);
@@ -40,14 +78,19 @@ function MessageBubble({ message, theme, index, onEditMessage }) {
   };
 
   return (
-    <div style={styles.container}>
+    <div
+      style={{
+        ...styles.container,
+        animation: "fadeInUp 0.3s ease-out both",
+      }}
+    >
       <div
         style={{
           display: "flex",
           flexDirection: "column",
           alignItems: isUser ? "flex-end" : "flex-start",
-          maxWidth: "80%",
-          width: isEditing ? "80%" : "auto",
+          maxWidth: isUser ? "85%" : "100%",
+          width: isEditing ? "100%" : isUser ? "auto" : "100%",
         }}
       >
         <article
@@ -106,50 +149,57 @@ function MessageBubble({ message, theme, index, onEditMessage }) {
           ) : isUser ? (
             <div style={styles.userText}>{message.content}</div>
           ) : (
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                h1: ({ children }) => (
-                  <h1 style={styles.markdown.h1}>{children}</h1>
-                ),
-                h2: ({ children }) => (
-                  <h2 style={styles.markdown.h2}>{children}</h2>
-                ),
-                h3: ({ children }) => (
-                  <h3 style={styles.markdown.h3}>{children}</h3>
-                ),
-                p: ({ children }) => (
-                  <div style={styles.markdown.p}>{children}</div>
-                ),
-                pre: ({ children }) => <>{children}</>,
-                code: ({ className, children, ...props }) => {
-                  const codeText = String(children).replace(/\n$/, "");
-                  const isCodeBlock =
-                    Boolean(className) || String(children).includes("\n");
+            <>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  h1: ({ children }) => (
+                    <h1 style={styles.markdown.h1}>{children}</h1>
+                  ),
+                  h2: ({ children }) => (
+                    <h2 style={styles.markdown.h2}>{children}</h2>
+                  ),
+                  h3: ({ children }) => (
+                    <h3 style={styles.markdown.h3}>{children}</h3>
+                  ),
+                  p: ({ children }) => (
+                    <div style={styles.markdown.p}>{children}</div>
+                  ),
+                  pre: ({ children }) => <>{children}</>,
+                  code: ({ className, children, ...props }) => {
+                    const codeText = String(children).replace(/\n$/, "");
+                    const isCodeBlock =
+                      Boolean(className) || String(children).includes("\n");
 
-                  if (!isCodeBlock) {
-                    return (
-                      <code {...props} style={styles.markdown.inlineCode}>
-                        {children}
-                      </code>
-                    );
-                  }
-
-                  return (
-                    <div style={styles.markdown.codeBlockWrapper}>
-                      <CopyButton code={codeText} isDark={isDark} />
-                      <pre style={styles.markdown.codePre}>
-                        <code className={className} {...props}>
+                    if (!isCodeBlock) {
+                      return (
+                        <code {...props} style={styles.markdown.inlineCode}>
                           {children}
                         </code>
-                      </pre>
-                    </div>
-                  );
-                },
-              }}
-            >
-              {message.content}
-            </ReactMarkdown>
+                      );
+                    }
+
+                    return (
+                      <div style={styles.markdown.codeBlockWrapper}>
+                        <CopyButton code={codeText} isDark={isDark} />
+                        <pre style={styles.markdown.codePre}>
+                          <code className={className} {...props}>
+                            {children}
+                          </code>
+                        </pre>
+                      </div>
+                    );
+                  },
+                }}
+              >
+                {message.content}
+              </ReactMarkdown>
+
+              {/* AI 流式输出时的闪烁光标 */}
+              {isLast && loading && message.content !== "" && (
+                <span className="typing-cursor" />
+              )}
+            </>
           )}
         </article>
 
@@ -157,44 +207,151 @@ function MessageBubble({ message, theme, index, onEditMessage }) {
           <div
             style={{
               display: "flex",
+              alignItems: "center",
               gap: 12,
               marginTop: 4,
               padding: "0 4px",
-              fontSize: 12,
               color: colors.textMuted,
+              fontSize: 12,
             }}
           >
-            <button
-              type="button"
-              onClick={handleCopyMessage}
-              style={{
-                background: "none",
-                border: "none",
-                color: colors.textMuted,
-                cursor: "pointer",
-                fontSize: 12,
-                padding: 0,
-              }}
-            >
-              {copied ? "Copied!" : "Copy"}
-            </button>
-
-            {isUser && (
-              <button
-                type="button"
-                onClick={() => setIsEditing(true)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: colors.textMuted,
-                  cursor: "pointer",
-                  fontSize: 12,
-                  padding: 0,
-                }}
+            {/* 相对时间 */}
+            {message.createdAt && (
+              <Tooltip
+                title={formatFullTime(message.createdAt)}
+                placement="top"
+                arrow
               >
-                Edit
-              </button>
+                <span style={{ cursor: "default", opacity: 0.7 }}>
+                  {formatRelativeTime(message.createdAt)}
+                </span>
+              </Tooltip>
             )}
+
+            {/* 图标组 */}
+            <div style={{ display: "flex", gap: 4, marginLeft: 4 }}>
+              {/* 👇 新增：用户消息的“重发”按钮 */}
+              {isUser && onRegenerate && (
+                <Tooltip title="Resend" placement="top" arrow>
+                  <button
+                    type="button"
+                    onClick={() => onRegenerate(index + 1)}
+                    // 如果正在生成中，就禁用按钮防止重复点击
+                    disabled={loading}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "inherit",
+                      cursor: loading ? "not-allowed" : "pointer",
+                      padding: "4px",
+                      display: "flex",
+                      alignItems: "center",
+                      transition: "color 0.2s",
+                      opacity: loading ? 0.5 : 1,
+                    }}
+                    onMouseEnter={(e) =>
+                      !loading && (e.currentTarget.style.color = colors.text)
+                    }
+                    onMouseLeave={(e) =>
+                      !loading &&
+                      (e.currentTarget.style.color = colors.textMuted)
+                    }
+                  >
+                    <Refresh fontSize="small" />
+                  </button>
+                </Tooltip>
+              )}
+
+              {/* Regenerate 按钮 (最后一条 AI 消息) */}
+              {!isUser && isLast && onRegenerate && (
+                <Tooltip title="Regenerate" placement="top" arrow>
+                  <button
+                    type="button"
+                    onClick={() => onRegenerate(index)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "inherit",
+                      cursor: "pointer",
+                      padding: "4px",
+                      display: "flex",
+                      alignItems: "center",
+                      transition: "color 0.2s",
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.color = colors.text)
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.color = colors.textMuted)
+                    }
+                  >
+                    <Refresh fontSize="small" />
+                  </button>
+                </Tooltip>
+              )}
+
+              {/* Edit 按钮 (仅限用户消息) */}
+              {isUser && (
+                <Tooltip title="Edit" placement="top" arrow>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(true)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "inherit",
+                      cursor: "pointer",
+                      padding: "4px",
+                      display: "flex",
+                      alignItems: "center",
+                      transition: "color 0.2s",
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.color = colors.text)
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.color = colors.textMuted)
+                    }
+                  >
+                    <Edit fontSize="small" />
+                  </button>
+                </Tooltip>
+              )}
+
+              {/* Copy 按钮 (所有消息都有) */}
+              <Tooltip
+                title={copied ? "Copied!" : "Copy"}
+                placement="top"
+                arrow
+              >
+                <button
+                  type="button"
+                  onClick={handleCopyMessage}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: copied ? colors.buttonBg : "inherit",
+                    cursor: "pointer",
+                    padding: "4px",
+                    display: "flex",
+                    alignItems: "center",
+                    transition: "color 0.2s",
+                  }}
+                  onMouseEnter={(e) =>
+                    !copied && (e.currentTarget.style.color = colors.text)
+                  }
+                  onMouseLeave={(e) =>
+                    !copied && (e.currentTarget.style.color = colors.textMuted)
+                  }
+                >
+                  {copied ? (
+                    <Check fontSize="small" />
+                  ) : (
+                    <ContentCopy fontSize="small" />
+                  )}
+                </button>
+              </Tooltip>
+            </div>
           </div>
         )}
       </div>

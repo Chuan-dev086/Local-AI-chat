@@ -9,6 +9,7 @@ function MessageList({
   chatEndRef,
   theme,
   onEditMessage,
+  onRegenerate,
 }) {
   const styles = getMessageListStyles(theme);
 
@@ -25,7 +26,6 @@ function MessageList({
             <div style={styles.emptyIcon}>
               {activeSession?.mode === "code" ? "💻" : "💬"}
             </div>
-
             <div style={styles.emptyText}>{emptyMessage}</div>
           </div>
         </div>
@@ -37,7 +37,10 @@ function MessageList({
           index={index}
           message={message}
           theme={theme}
+          isLast={index === activeSession.messages.length - 1}
+          loading={loading}
           onEditMessage={onEditMessage}
+          onRegenerate={onRegenerate}
         />
       ))}
 

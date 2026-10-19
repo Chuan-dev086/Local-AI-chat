@@ -562,6 +562,7 @@ function App() {
     const userMessage = {
       role: "user",
       content: userText,
+      createdAt: new Date().toISOString(),
     };
 
     const conversationMessages = [...activeSession.messages, userMessage];
@@ -593,6 +594,7 @@ function App() {
             {
               role: "assistant",
               content: "",
+              createdAt: new Date().toISOString(),
             },
           ],
 
@@ -731,6 +733,7 @@ function App() {
       .concat({
         role: "user",
         content: editedText,
+        createdAt: new Date().toISOString(),
       });
 
     setLoading(true);
@@ -748,6 +751,7 @@ function App() {
             {
               role: "assistant",
               content: "",
+              createdAt: new Date().toISOString(),
             },
           ],
           updatedAt: new Date().toISOString(),
@@ -854,6 +858,40 @@ function App() {
   };
 
   // =========================
+  // Regenerate Response
+  // =========================
+  const handleRegenerate = (assistantIndex) => {
+    if (loading || !activeSession || abortRef.current) return;
+
+    const messages = activeSession.messages;
+    const userIndex = assistantIndex - 1;
+
+    // 如果是用户发的消息触发了重发（传进来的是 user 的下标），修正一下
+    let targetUserIndex = userIndex;
+    if (messages[assistantIndex]?.role === "user") {
+      targetUserIndex = assistantIndex;
+    }
+
+    const userMessage = messages[targetUserIndex];
+    if (!userMessage || userMessage.role !== "user") return;
+
+    // 如果点击的不是最后一条，确认是否截断后续对话
+    const isLastMessage = targetUserIndex === messages.length - 2;
+    if (!isLastMessage) {
+      if (
+        !window.confirm(
+          "Regenerating this will remove all messages after it. Continue?",
+        )
+      ) {
+        return;
+      }
+    }
+
+    // 复用编辑消息的逻辑，相当于用一模一样的文字重新发送
+    handleEditMessage(targetUserIndex, userMessage.content);
+  };
+
+  // =========================
   // Stop Generation
   // =========================
 
@@ -913,6 +951,7 @@ function App() {
                 chatEndRef={chatEndRef}
                 theme={theme}
                 onEditMessage={handleEditMessage}
+                onRegenerate={handleRegenerate}
               />
             </div>
           </div>
