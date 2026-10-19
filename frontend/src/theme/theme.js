@@ -319,6 +319,31 @@ export const getSidebarStyles = (theme, collapsed) => {
       borderBottom: `1px solid ${colors.border}`,
       flexShrink: 0,
     },
+    searchFieldSx: {
+      "& .MuiOutlinedInput-root": {
+        backgroundColor: colors.inputBg,
+        color: colors.text,
+        fontSize: "13px",
+        borderRadius: "8px",
+        "& fieldset": {
+          borderColor: colors.border,
+        },
+        "&:hover fieldset": {
+          borderColor: colors.border,
+        },
+        "&.Mui-focused fieldset": {
+          borderColor: colors.buttonBg,
+        },
+      },
+      "& .MuiInputBase-input::placeholder": {
+        color: colors.textMuted,
+        opacity: 1,
+      },
+      "& .MuiSvgIcon-root": {
+        color: colors.textMuted,
+        fontSize: "18px",
+      },
+    },
     title: {
       margin: 0,
       color: colors.text,

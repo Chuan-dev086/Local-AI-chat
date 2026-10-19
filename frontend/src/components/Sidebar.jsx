@@ -1,6 +1,14 @@
 // src/components/Sidebar.jsx
 
-import { Button } from "@mui/material";
+import { useState } from "react";
+import {
+  Button,
+  TextField,
+  InputAdornment,
+  Box,
+  Typography,
+} from "@mui/material";
+import { Search } from "@mui/icons-material";
 import { getSidebarStyles } from "../theme/theme";
 
 function Sidebar({
@@ -14,6 +22,19 @@ function Sidebar({
   onDeleteSession,
 }) {
   const styles = getSidebarStyles(theme, collapsed);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // 过滤逻辑：搜标题 或 搜消息内容
+  const filteredSessions = sessions.filter((session) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    const matchTitle = session.title.toLowerCase().includes(query);
+    // 搜索消息内容（防崩处理：确保 messages 是数组）
+    const matchContent =
+      Array.isArray(session.messages) &&
+      session.messages.some((msg) => msg.content.toLowerCase().includes(query));
+    return matchTitle || matchContent;
+  });
 
   return (
     <aside style={styles.aside}>
@@ -31,46 +52,72 @@ function Sidebar({
           >
             + New Chat
           </Button>
+
+          {/* 搜索框 */}
+          <Box sx={{ mt: 2 }}>
+            <TextField
+              placeholder="Search chats..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              size="small"
+              fullWidth
+              variant="outlined"
+              sx={styles.searchFieldSx}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search />
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </Box>
         </div>
 
         <div style={styles.list}>
-          {sessions.map((session) => {
-            const isActive = session.id === activeSessionId;
+          {filteredSessions.length === 0 ? (
+            <Box sx={{ p: 2, textAlign: "center", color: "text.secondary" }}>
+              <Typography variant="body2">No chats found.</Typography>
+            </Box>
+          ) : (
+            filteredSessions.map((session) => {
+              const isActive = session.id === activeSessionId;
 
-            return (
-              <div
-                key={session.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => onSelectSession(session.id)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    onSelectSession(session.id);
-                  }
-                }}
-                style={styles.sessionItem(isActive, loading)}
-              >
-                <span
-                  title={session.title}
-                  style={styles.sessionTitle(isActive)}
+              return (
+                <div
+                  key={session.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onSelectSession(session.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      onSelectSession(session.id);
+                    }
+                  }}
+                  style={styles.sessionItem(isActive, loading)}
                 >
-                  {session.mode === "code" ? "💻 " : "💬 "}
-                  {session.title}
-                </span>
+                  <span
+                    title={session.title}
+                    style={styles.sessionTitle(isActive)}
+                  >
+                    {session.mode === "code" ? "💻 " : "💬 "}
+                    {session.title}
+                  </span>
 
-                <button
-                  type="button"
-                  aria-label={`Delete ${session.title}`}
-                  title="Delete chat"
-                  onClick={(event) => onDeleteSession(event, session.id)}
-                  disabled={loading}
-                  style={styles.deleteBtn(loading)}
-                >
-                  ×
-                </button>
-              </div>
-            );
-          })}
+                  <button
+                    type="button"
+                    aria-label={`Delete ${session.title}`}
+                    title="Delete chat"
+                    onClick={(event) => onDeleteSession(event, session.id)}
+                    disabled={loading}
+                    style={styles.deleteBtn(loading)}
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })
+          )}
         </div>
 
         <div style={styles.footer}>
