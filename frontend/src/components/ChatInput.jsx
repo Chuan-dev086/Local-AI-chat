@@ -44,7 +44,7 @@ function ChatInput({
           maxRows={8}
           variant="standard"
           fullWidth
-          InputProps={{ disableUnderline: true }}
+          slotProps={{ disableUnderline: true }}
           sx={styles.textFieldSx}
         />
 

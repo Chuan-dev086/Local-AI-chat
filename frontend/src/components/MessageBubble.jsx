@@ -6,6 +6,8 @@ import { Button, TextField, Tooltip } from "@mui/material";
 import { ContentCopy, Edit, Refresh, Check } from "@mui/icons-material";
 import { getMessageBubbleStyles, getThemeStyles } from "../theme/theme";
 import CopyButton from "./CopyButton";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { nightOwl } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 // 格式化相对时间
 function formatRelativeTime(dateString) {
@@ -167,10 +169,12 @@ function MessageBubble({
                   ),
                   pre: ({ children }) => <>{children}</>,
                   code: ({ className, children, ...props }) => {
+                    const match = /language-(\w+)/.exec(className || "");
                     const codeText = String(children).replace(/\n$/, "");
                     const isCodeBlock =
                       Boolean(className) || String(children).includes("\n");
 
+                    // 如果是单行代码（比如 `useEffect`），保持原样
                     if (!isCodeBlock) {
                       return (
                         <code {...props} style={styles.markdown.inlineCode}>
@@ -179,14 +183,26 @@ function MessageBubble({
                       );
                     }
 
+                    // 如果是代码块，使用 SyntaxHighlighter 渲染
                     return (
                       <div style={styles.markdown.codeBlockWrapper}>
                         <CopyButton code={codeText} isDark={isDark} />
-                        <pre style={styles.markdown.codePre}>
-                          <code className={className} {...props}>
-                            {children}
-                          </code>
-                        </pre>
+                        <SyntaxHighlighter
+                          style={nightOwl}
+                          language={match ? match[1] : "text"} // 自动识别语言
+                          PreTag="div"
+                          customStyle={{
+                            margin: 0,
+                            borderRadius: 8,
+                            padding: "14px 48px 14px 14px",
+                            fontSize: 13,
+                            lineHeight: 1.55,
+                            backgroundColor: "#0d1117",
+                            border: "1px solid #30363d",
+                          }}
+                        >
+                          {codeText}
+                        </SyntaxHighlighter>
                       </div>
                     );
                   },

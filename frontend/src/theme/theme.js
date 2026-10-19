@@ -14,8 +14,8 @@ export const lightColors = {
   inputBg: "#ffffff",
   codeBg: "#0f172a",
   codeText: "#e2e8f0",
-  inlineCodeBg: "#dbeafe",
-  inlineCodeText: "#1e3a8a",
+  inlineCodeBg: "#ffe4e6", // 浅红色背景
+  inlineCodeText: "#be123c", // 深红色文字
   activeSessionBg: "#dbeafe",
   buttonBg: "#2563eb",
   buttonDisabled: "#94a3b8",
@@ -39,8 +39,8 @@ export const darkColors = {
   inputBg: "#1e293b",
   codeBg: "#0d1117",
   codeText: "#e2e8f0",
-  inlineCodeBg: "#1e293b",
-  inlineCodeText: "#e2e8f0",
+  inlineCodeBg: "rgba(244, 63, 94, 0.15)", // 淡淡的红色透明背景
+  inlineCodeText: "#fb7185", // 高对比度的亮红色（Rose 400）
   activeSessionBg: "#1e40af",
   buttonBg: "#3b82f6",
   buttonDisabled: "#94a3b8",
@@ -235,12 +235,14 @@ export const getMessageBubbleStyles = (theme, isUser) => {
         margin: "8px 0",
       },
       inlineCode: {
-        padding: "2px 5px",
+        padding: "2px 6px",
         borderRadius: 4,
         backgroundColor: colors.inlineCodeBg,
         color: colors.inlineCodeText,
         fontFamily: codeFontFamily,
         fontSize: "0.9em",
+        fontWeight: 600,
+        letterSpacing: "0.5px",
       },
       codeBlockWrapper: {
         position: "relative",

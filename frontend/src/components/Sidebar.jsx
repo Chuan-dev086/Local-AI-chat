@@ -63,7 +63,7 @@ function Sidebar({
               fullWidth
               variant="outlined"
               sx={styles.searchFieldSx}
-              InputProps={{
+              slotProps={{
                 startAdornment: (
                   <InputAdornment position="start">
                     <Search />
