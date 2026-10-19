@@ -1,6 +1,7 @@
 // src/components/ChatInput.jsx
 
-import { Button, TextField } from "@mui/material";
+import { Box, IconButton, TextField } from "@mui/material";
+import { ArrowUpward, Stop } from "@mui/icons-material";
 import { getChatInputStyles } from "../theme/theme";
 
 function ChatInput({
@@ -16,13 +17,23 @@ function ChatInput({
   const isInputEmpty = !input.trim();
   const styles = getChatInputStyles(theme, loading, isInputEmpty);
 
+  const handleKeyDown = (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      if (!loading && !isInputEmpty) {
+        onSendMessage();
+      }
+    }
+    onKeyDown(event); // 保留外部传入的逻辑
+  };
+
   return (
-    <>
-      <div style={styles.inputWrapper}>
+    <div style={styles.wrapper}>
+      <Box sx={styles.pillContainer}>
         <TextField
           value={input}
           onChange={(event) => onInputChange(event.target.value)}
-          onKeyDown={onKeyDown}
+          onKeyDown={handleKeyDown}
           placeholder={
             activeSession?.mode === "code"
               ? "Ask a programming question…"
@@ -30,40 +41,30 @@ function ChatInput({
           }
           disabled={loading}
           multiline
-          rows={2}
-          variant="outlined"
-          size="small"
+          maxRows={8}
+          variant="standard"
           fullWidth
+          InputProps={{ disableUnderline: true }}
           sx={styles.textFieldSx}
         />
 
-        {loading ? (
-          <Button
-            type="button"
-            onClick={onStop}
-            variant="outlined"
-            color="error"
-            sx={styles.sendBtnSx}
-          >
-            Stop
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            onClick={onSendMessage}
-            disabled={isInputEmpty}
-            variant="contained"
-            sx={styles.sendBtnSx}
-          >
-            Send
-          </Button>
-        )}
-      </div>
+        <IconButton
+          onClick={loading ? onStop : onSendMessage}
+          disabled={!loading && isInputEmpty}
+          sx={styles.actionBtnSx}
+        >
+          {loading ? (
+            <Stop fontSize="small" />
+          ) : (
+            <ArrowUpward fontSize="small" />
+          )}
+        </IconButton>
+      </Box>
 
       <p style={styles.tipText}>
-        Press Enter to send. Use Shift + Enter for a new line.
+        AI can make mistakes. Consider checking important information.
       </p>
-    </>
+    </div>
   );
 }
 

@@ -495,49 +495,74 @@ export const getChatInputStyles = (theme, loading, isInputEmpty) => {
   const { colors } = getThemeStyles(theme);
 
   return {
-    container: {},
-    inputWrapper: {
+    wrapper: {
       display: "flex",
-      gap: 10,
+      flexDirection: "column",
+      alignItems: "center",
+      width: "100%",
+    },
+    pillContainer: {
+      display: "flex",
+      alignItems: "flex-end",
+      width: "100%",
+      backgroundColor: theme === "dark" ? "#1e293b" : "#ffffff",
+      border: `1px solid ${colors.border}`,
+      borderRadius: "24px",
+      padding: "8px 8px 8px 16px",
+      boxShadow:
+        theme === "dark"
+          ? "0 4px 20px rgba(0,0,0,0.2)"
+          : "0 4px 20px rgba(15,23,42,0.05)",
+      transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+      "&:focus-within": {
+        borderColor: colors.buttonBg,
+        boxShadow: `0 0 0 2px ${colors.buttonBg}33`, // 浅浅的一圈光晕
+      },
     },
     textFieldSx: {
-      "& .MuiOutlinedInput-root": {
+      "& .MuiInputBase-root": {
         color: colors.text,
-        backgroundColor: loading ? colors.bg : colors.inputBg,
-        "& fieldset": {
-          borderColor: colors.border,
-        },
-        "&:hover fieldset": {
-          borderColor: colors.border,
-        },
-        "&.Mui-focused fieldset": {
-          borderColor: colors.buttonBg,
-        },
+        fontSize: "15px",
+        lineHeight: 1.5,
+        padding: "8px 0",
+        margin: 0,
       },
-      "& .MuiOutlinedInput-input::placeholder": {
+      "& .MuiInputBase-root::before, & .MuiInputBase-root::after": {
+        display: "none",
+      },
+      "& .MuiInputBase-root.Mui-focused": {
+        boxShadow: "none",
+      },
+      "& .MuiInputBase-input::placeholder": {
         color: colors.textMuted,
         opacity: 1,
       },
     },
-    sendBtnSx: {
-      minWidth: 92,
+    actionBtnSx: {
       backgroundColor:
-        loading || isInputEmpty ? colors.buttonDisabled : "#4f46e5",
-      color: "#ffffff",
-      fontWeight: 700,
-      textTransform: "none",
-      fontSize: "1rem",
-      padding: "9px 16px",
-      borderRadius: "10px",
+        isInputEmpty && !loading ? "transparent" : colors.buttonBg,
+      color: isInputEmpty && !loading ? colors.textMuted : "#ffffff",
+      width: 32,
+      height: 32,
+      marginLeft: 1,
+      marginBottom: 1,
+      flexShrink: 0,
+      transition: "all 0.2s ease",
       "&:hover": {
-        backgroundColor:
-          loading || isInputEmpty ? colors.buttonDisabled : "#3f3bc4",
+        backgroundColor: isInputEmpty && !loading ? "transparent" : "#3f3bc4",
+        color: isInputEmpty && !loading ? colors.text : "#ffffff",
+      },
+      "&.Mui-disabled": {
+        backgroundColor: "transparent",
+        color: colors.border,
       },
     },
     tipText: {
-      margin: "8px 0 0",
+      margin: "12px 0 0",
       color: colors.textMuted,
-      fontSize: 12,
+      fontSize: 11,
+      textAlign: "center",
+      opacity: 0.8,
     },
   };
 };
