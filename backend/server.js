@@ -269,6 +269,7 @@ app.post("/api/chat", async (req, res) => {
 
         options: {
           num_predict: MAX_OUTPUT_TOKENS,
+          num_ctx: 8192,
         },
       },
       {
