@@ -140,6 +140,7 @@ function App() {
       return false;
     }
   });
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
 
   const [sessions, setSessions] = useState(initialChatState.sessions);
   const [activeSessionId, setActiveSessionId] = useState(
@@ -977,6 +978,7 @@ function App() {
           onNewChat={handleNewChat}
           onSelectSession={handleSelectSession}
           onDeleteSession={handleDeleteSession}
+          onRenameSession={handleRenameSession}
           searchInputRef={searchInputRef}
         />
 
@@ -994,7 +996,17 @@ function App() {
             onToggleTheme={toggleTheme}
           />
 
-          <div style={themeStyles.messagesArea}>
+          <div
+            style={themeStyles.messagesArea}
+            id="chat-scroll-container" // 👈 加 id
+            onScroll={(e) => {
+              const { scrollTop, scrollHeight, clientHeight } = e.target;
+              // 距离底部超过 300px 时显示按钮
+              setShowScrollBottom(
+                scrollHeight - scrollTop - clientHeight > 300,
+              );
+            }}
+          >
             <div style={themeStyles.messagesInner}>
               <MessageList
                 activeSession={activeSession}
@@ -1007,6 +1019,43 @@ function App() {
             </div>
           </div>
 
+          {/* 👇 滚动到底部按钮 */}
+          {showScrollBottom && (
+            <button
+              onClick={() => {
+                const container = document.getElementById(
+                  "chat-scroll-container",
+                );
+                if (container) {
+                  container.scrollTo({
+                    top: container.scrollHeight,
+                    behavior: "smooth",
+                  });
+                }
+              }}
+              style={{
+                position: "absolute",
+                bottom: "120px", // 悬浮在输入框上方
+                right: "calc(50% - 410px)", // 820px 容器宽度的右侧
+                width: 36,
+                height: 36,
+                borderRadius: "50%",
+                backgroundColor: themeStyles.colors?.containerBg || "#fff",
+                border: `1px solid ${themeStyles.colors?.border || "#cbd5e1"}`,
+                color: themeStyles.colors?.text || "#000",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 10,
+                transition: "all 0.2s ease",
+              }}
+              title="Scroll to bottom"
+            >
+              <span style={{ fontSize: "18px", fontWeight: "bold" }}>↓</span>
+            </button>
+          )}
           <div style={themeStyles.inputArea}>
             <div style={themeStyles.inputInner}>
               <ChatInput

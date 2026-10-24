@@ -2,6 +2,7 @@
 
 import { Box, IconButton, TextField } from "@mui/material";
 import { ArrowUpward, Stop } from "@mui/icons-material";
+import { useState } from "react";
 import { getChatInputStyles } from "../theme/theme";
 
 function ChatInput({
@@ -17,14 +18,55 @@ function ChatInput({
   const isInputEmpty = !input.trim();
   const styles = getChatInputStyles(theme, loading, isInputEmpty);
 
+  // 记录历史输入的索引，-1 表示当前不在历史记录中
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
   const handleKeyDown = (event) => {
+    const userMessages =
+      activeSession?.messages
+        .filter((m) => m.role === "user")
+        .map((m) => m.content) || [];
+
+    // 👇 上箭头：翻阅历史记录
+    if (event.key === "ArrowUp" && userMessages.length > 0) {
+      if (historyIndex === -1 && input === "") {
+        event.preventDefault();
+        const newIndex = userMessages.length - 1;
+        setHistoryIndex(newIndex);
+        onInputChange(userMessages[newIndex]);
+      } else if (historyIndex > 0) {
+        event.preventDefault();
+        const newIndex = historyIndex - 1;
+        setHistoryIndex(newIndex);
+        onInputChange(userMessages[newIndex]);
+      }
+      return;
+    }
+
+    // 👇 下箭头：往回翻
+    if (event.key === "ArrowDown" && historyIndex !== -1) {
+      event.preventDefault();
+      if (historyIndex < userMessages.length - 1) {
+        const newIndex = historyIndex + 1;
+        setHistoryIndex(newIndex);
+        onInputChange(userMessages[newIndex]);
+      } else {
+        setHistoryIndex(-1);
+        onInputChange("");
+      }
+      return;
+    }
+
+    // 回车发送
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       if (!loading && !isInputEmpty) {
         onSendMessage();
+        setHistoryIndex(-1); // 发送后重置历史索引
       }
     }
-    onKeyDown(event); // 保留外部传入的逻辑
+
+    if (onKeyDown) onKeyDown(event);
   };
 
   return (
@@ -32,7 +74,10 @@ function ChatInput({
       <Box sx={styles.pillContainer}>
         <TextField
           value={input}
-          onChange={(event) => onInputChange(event.target.value)}
+          onChange={(event) => {
+            onInputChange(event.target.value);
+            setHistoryIndex(-1); // 手动打字时重置历史索引
+          }}
           onKeyDown={handleKeyDown}
           placeholder={
             activeSession?.mode === "code"
@@ -44,7 +89,7 @@ function ChatInput({
           maxRows={8}
           variant="standard"
           fullWidth
-          slotProps={{ disableUnderline: true }}
+          slotProps={{ input: { disableUnderline: true } }}
           sx={styles.textFieldSx}
         />
 

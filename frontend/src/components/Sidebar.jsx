@@ -9,7 +9,7 @@ import {
   Typography,
 } from "@mui/material";
 import { Search } from "@mui/icons-material";
-import { getSidebarStyles } from "../theme/theme";
+import { getSidebarStyles, getThemeStyles } from "../theme/theme"; // 👈 引入 getThemeStyles
 
 function Sidebar({
   sessions,
@@ -20,9 +20,11 @@ function Sidebar({
   onNewChat,
   onSelectSession,
   onDeleteSession,
+  onRenameSession, // 👈 新增：接收重命名函数
   searchInputRef,
 }) {
   const styles = getSidebarStyles(theme, collapsed);
+  const { colors } = getThemeStyles(theme); // 👈 获取颜色配置
   const [searchQuery, setSearchQuery] = useState("");
 
   // 过滤逻辑：搜标题 或 搜消息内容
@@ -30,7 +32,6 @@ function Sidebar({
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
     const matchTitle = session.title.toLowerCase().includes(query);
-    // 搜索消息内容（防崩处理：确保 messages 是数组）
     const matchContent =
       Array.isArray(session.messages) &&
       session.messages.some((msg) => msg.content.toLowerCase().includes(query));
@@ -66,11 +67,13 @@ function Sidebar({
               variant="outlined"
               sx={styles.searchFieldSx}
               slotProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Search />
-                  </InputAdornment>
-                ),
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Search />
+                    </InputAdornment>
+                  ),
+                },
               }}
             />
           </Box>
@@ -101,6 +104,10 @@ function Sidebar({
                   <span
                     title={session.title}
                     style={styles.sessionTitle(isActive)}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation(); // 👈 阻止触发点击选中事件
+                      if (onRenameSession) onRenameSession();
+                    }}
                   >
                     {session.mode === "code" ? "💻 " : "💬 "}
                     {session.title}
@@ -122,9 +129,28 @@ function Sidebar({
           )}
         </div>
 
+        {/* 底部：一键清空 */}
         <div style={styles.footer}>
-          {sessions.length} {sessions.length === 1 ? "chat" : "chats"} saved
-          locally
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm("确定要清空所有聊天记录吗？此操作不可逆。")) {
+                localStorage.removeItem("local_ai_chat_sessions_v2");
+                window.location.reload(); // 刷新页面重置状态
+              }
+            }}
+            style={{
+              background: "none",
+              border: "none",
+              color: colors.textMuted,
+              cursor: "pointer",
+              fontSize: 12,
+              textDecoration: "underline",
+              padding: 0,
+            }}
+          >
+            Clear all chats
+          </button>
         </div>
       </div>
     </aside>
