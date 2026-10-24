@@ -20,6 +20,7 @@ function Sidebar({
   onNewChat,
   onSelectSession,
   onDeleteSession,
+  searchInputRef,
 }) {
   const styles = getSidebarStyles(theme, collapsed);
   const [searchQuery, setSearchQuery] = useState("");
@@ -56,6 +57,7 @@ function Sidebar({
           {/* 搜索框 */}
           <Box sx={{ mt: 2 }}>
             <TextField
+              inputRef={searchInputRef}
               placeholder="Search chats..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}

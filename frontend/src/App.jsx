@@ -152,6 +152,7 @@ function App() {
 
   const chatEndRef = useRef(null);
   const abortRef = useRef(null);
+  const searchInputRef = useRef(null);
 
   const themeStyles = getThemeStyles(theme);
 
@@ -899,6 +900,55 @@ function App() {
     abortRef.current?.abort();
   };
 
+  // 全局快捷键
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      // 1. 👇 Ctrl+K 必须放在最前面，且必须拦截浏览器默认行为
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault(); // 阻止 Chrome 聚焦地址栏
+        e.stopPropagation(); // 阻止事件冒泡
+
+        if (sidebarCollapsed) {
+          setSidebarCollapsed(false);
+          setTimeout(() => searchInputRef.current?.focus(), 260);
+        } else {
+          searchInputRef.current?.focus();
+        }
+        return; // 执行完直接结束，不往下走
+      }
+
+      // 2. 判断用户是否正在输入框打字
+      const isTyping = ["INPUT", "TEXTAREA"].includes(
+        document.activeElement.tagName,
+      );
+      // 如果在打字，且按的不是 Esc，就不触发其他全局快捷键（比如 Alt+N）
+      if (isTyping && e.key !== "Escape") return;
+
+      // 3. Alt + N: 新建聊天
+      if (e.altKey && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        handleNewChat();
+      }
+
+      // 4. Esc: 停止生成
+      if (e.key === "Escape") {
+        if (loading) {
+          handleStop();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown, { capture: true }); // 👈 加上 capture 抢先拦截
+
+    return () => {
+      window.removeEventListener("keydown", handleGlobalKeyDown, {
+        capture: true,
+      });
+    };
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, sidebarCollapsed]);
+
   // =========================
   // Keyboard
   // =========================
@@ -927,6 +977,7 @@ function App() {
           onNewChat={handleNewChat}
           onSelectSession={handleSelectSession}
           onDeleteSession={handleDeleteSession}
+          searchInputRef={searchInputRef}
         />
 
         <div style={themeStyles.mainContent}>

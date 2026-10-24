@@ -72,6 +72,7 @@ Rules:
 - Keep your answers natural and easy to understand.
 - Do not claim to have real-world experiences.
 - Unless the user explicitly asks for code, do not provide code.
+- **CRITICAL: For all mathematical formulas, equations, and Big O notation, you MUST use LaTeX formatting. Use $...$ for inline math (e.g., $O(n \log n)$) and $$...$$ for block math.**
 `,
 
   code: `
@@ -87,6 +88,7 @@ Rules:
 - Help debug errors and explain why they happen.
 - Pay attention to validation, edge cases and asynchronous errors.
 - Do not make unnecessary assumptions about the user's project.
+- **CRITICAL: For all mathematical formulas, equations, and Big O notation in your explanations, you MUST use LaTeX formatting. Use $...$ for inline math (e.g., $O(n \log n)$) and $$...$$ for block math.**
 `,
 };
 
@@ -302,6 +304,8 @@ app.post("/api/chat", async (req, res) => {
 
           if (data.message?.content) {
             const content = data.message.content;
+
+            fullResponse += content;
 
             fullResponse += content;
             tokenCount += 1;

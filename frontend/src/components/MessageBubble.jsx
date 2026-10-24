@@ -2,6 +2,8 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import { Button, TextField, Tooltip } from "@mui/material";
 import { ContentCopy, Edit, Refresh, Check } from "@mui/icons-material";
 import { getMessageBubbleStyles, getThemeStyles } from "../theme/theme";
@@ -153,7 +155,8 @@ function MessageBubble({
           ) : (
             <>
               <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
+                remarkPlugins={[remarkGfm, remarkMath]}
+                rehypePlugins={[rehypeKatex]}
                 components={{
                   h1: ({ children }) => (
                     <h1 style={styles.markdown.h1}>{children}</h1>
