@@ -151,7 +151,14 @@ function MessageBubble({
               </div>
             </div>
           ) : isUser ? (
-            <div style={styles.userText}>{message.content}</div>
+            <div style={styles.userText}>
+              {message.content}
+              {message.file && (
+                <div style={{ marginTop: 8, opacity: 0.8, fontSize: 13 }}>
+                  📎 附件: {message.file}
+                </div>
+              )}
+            </div>
           ) : (
             <>
               <ReactMarkdown

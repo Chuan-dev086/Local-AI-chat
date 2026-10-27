@@ -1,8 +1,6 @@
-// src/components/ChatInput.jsx
-
-import { Box, IconButton, TextField } from "@mui/material";
-import { ArrowUpward, Stop } from "@mui/icons-material";
-import { useState } from "react";
+import { Box, IconButton, TextField, Chip } from "@mui/material";
+import { ArrowUpward, Stop, AttachFile, Close } from "@mui/icons-material";
+import { useState, useRef } from "react";
 import { getChatInputStyles } from "../theme/theme";
 
 function ChatInput({
@@ -10,16 +8,39 @@ function ChatInput({
   loading,
   activeSession,
   theme,
+  attachedFile,
+  onAttachFile,
+  onRemoveFile,
   onInputChange,
   onKeyDown,
   onSendMessage,
   onStop,
 }) {
-  const isInputEmpty = !input.trim();
+  const isInputEmpty = !input.trim() && !attachedFile;
   const styles = getChatInputStyles(theme, loading, isInputEmpty);
-
-  // 记录历史输入的索引，-1 表示当前不在历史记录中
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const fileInputRef = useRef(null);
+
+  // 读取本地文件
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      let content = event.target.result;
+      // 限制最大 8000 字符，防止超出模型上下文导致崩溃
+      const MAX_CHARS = 8000;
+      let isTruncated = false;
+      if (content.length > MAX_CHARS) {
+        content = content.slice(0, MAX_CHARS);
+        isTruncated = true;
+      }
+      onAttachFile({ name: file.name, content, isTruncated });
+    };
+    reader.readAsText(file);
+    e.target.value = null; // 允许重复上传同名文件
+  };
 
   const handleKeyDown = (event) => {
     const userMessages =
@@ -27,56 +48,94 @@ function ChatInput({
         .filter((m) => m.role === "user")
         .map((m) => m.content) || [];
 
-    // 👇 上箭头：翻阅历史记录
+    // 上箭头：翻阅历史
     if (event.key === "ArrowUp" && userMessages.length > 0) {
       if (historyIndex === -1 && input === "") {
         event.preventDefault();
-        const newIndex = userMessages.length - 1;
-        setHistoryIndex(newIndex);
-        onInputChange(userMessages[newIndex]);
+        setHistoryIndex(userMessages.length - 1);
+        onInputChange(userMessages[userMessages.length - 1]);
       } else if (historyIndex > 0) {
         event.preventDefault();
-        const newIndex = historyIndex - 1;
-        setHistoryIndex(newIndex);
-        onInputChange(userMessages[newIndex]);
+        setHistoryIndex(historyIndex - 1);
+        onInputChange(userMessages[historyIndex - 1]);
       }
       return;
     }
-
-    // 👇 下箭头：往回翻
+    // 下箭头：往回翻
     if (event.key === "ArrowDown" && historyIndex !== -1) {
       event.preventDefault();
       if (historyIndex < userMessages.length - 1) {
-        const newIndex = historyIndex + 1;
-        setHistoryIndex(newIndex);
-        onInputChange(userMessages[newIndex]);
+        setHistoryIndex(historyIndex + 1);
+        onInputChange(userMessages[historyIndex + 1]);
       } else {
         setHistoryIndex(-1);
         onInputChange("");
       }
       return;
     }
-
     // 回车发送
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       if (!loading && !isInputEmpty) {
         onSendMessage();
-        setHistoryIndex(-1); // 发送后重置历史索引
+        setHistoryIndex(-1);
       }
     }
-
     if (onKeyDown) onKeyDown(event);
   };
 
   return (
     <div style={styles.wrapper}>
+      {/* 显示已附加的文件标签 */}
+      {attachedFile && (
+        <Box
+          sx={{
+            width: "100%",
+            mb: 1,
+            display: "flex",
+            justifyContent: "flex-start",
+          }}
+        >
+          <Chip
+            icon={<AttachFile fontSize="small" />}
+            label={
+              attachedFile.name + (attachedFile.isTruncated ? " (已截断)" : "")
+            }
+            onDelete={onRemoveFile}
+            deleteIcon={<Close />}
+            size="small"
+            sx={{
+              backgroundColor: theme === "dark" ? "#334155" : "#e2e8f0",
+              color: theme === "dark" ? "#e2e8f0" : "#0f172a",
+            }}
+          />
+        </Box>
+      )}
+
       <Box sx={styles.pillContainer}>
+        {/* 隐藏的文件选择器 */}
+        <input
+          type="file"
+          accept=".txt,.md,.js,.jsx,.ts,.tsx,.py,.json,.html,.css,.csv"
+          style={{ display: "none" }}
+          ref={fileInputRef}
+          onChange={handleFileChange}
+        />
+
+        {/* 回形针按钮 */}
+        <IconButton
+          onClick={() => fileInputRef.current?.click()}
+          disabled={loading}
+          sx={{ ml: 1, mb: 0.5, color: "text.secondary" }}
+        >
+          <AttachFile fontSize="small" />
+        </IconButton>
+
         <TextField
           value={input}
           onChange={(event) => {
             onInputChange(event.target.value);
-            setHistoryIndex(-1); // 手动打字时重置历史索引
+            setHistoryIndex(-1);
           }}
           onKeyDown={handleKeyDown}
           placeholder={

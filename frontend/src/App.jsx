@@ -4,8 +4,9 @@ import Sidebar from "./components/Sidebar";
 import ChatHeader from "./components/ChatHeader";
 import MessageList from "./components/MessageList";
 import ChatInput from "./components/ChatInput";
-import { getThemeStyles } from "./theme/theme";
 import SystemPromptDialog from "./components/SystemPromptDialog";
+import RenameDialog from "./components/RenameDialog";
+import { getThemeStyles } from "./theme/theme";
 
 const API_BASE = "http://localhost:5000/api";
 const API_URL = `${API_BASE}/chat`;
@@ -14,7 +15,6 @@ const STORAGE_KEY = "local_ai_chat_sessions_v2";
 const THEME_KEY = "local_ai_chat_theme";
 const SIDEBAR_KEY = "local_ai_chat_sidebar_collapsed";
 
-// 必须和后端 DEFAULT_MODELS 保持一致
 const DEFAULT_MODELS = {
   chat: "llama3.2:3b",
   code: "qwen2.5-coder:3b",
@@ -24,13 +24,11 @@ function generateSessionId() {
   if (crypto.randomUUID) {
     return `session_${crypto.randomUUID()}`;
   }
-
   return `session_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function createNewSession(mode = "chat") {
   const now = new Date().toISOString();
-
   return {
     id: generateSessionId(),
     title: "New Chat",
@@ -45,23 +43,14 @@ function createNewSession(mode = "chat") {
 
 function getTitleFromMessage(message) {
   const cleanMessage = message.replace(/\s+/g, " ").trim();
-
-  if (!cleanMessage) {
-    return "New Chat";
-  }
-
+  if (!cleanMessage) return "New Chat";
   const maxLength = 36;
-
-  if (cleanMessage.length <= maxLength) {
-    return cleanMessage;
-  }
-
+  if (cleanMessage.length <= maxLength) return cleanMessage;
   return `${cleanMessage.slice(0, maxLength)}...`;
 }
 
 function getInitialChatState() {
   const fallbackSession = createNewSession();
-
   const fallbackState = {
     activeSessionId: fallbackSession.id,
     sessions: [fallbackSession],
@@ -69,13 +58,9 @@ function getInitialChatState() {
 
   try {
     const savedData = localStorage.getItem(STORAGE_KEY);
-
-    if (!savedData) {
-      return fallbackState;
-    }
+    if (!savedData) return fallbackState;
 
     const parsedData = JSON.parse(savedData);
-
     if (
       !Array.isArray(parsedData.sessions) ||
       parsedData.sessions.length === 0
@@ -85,12 +70,10 @@ function getInitialChatState() {
 
     const normalizedSessions = parsedData.sessions.map((session) => {
       const safeMode = session.mode === "code" ? "code" : "chat";
-
       return {
         id: session.id || generateSessionId(),
         title: session.title || "New Chat",
         mode: safeMode,
-        // 老数据没有 model 字段时，自动补上默认模型
         model: session.model || DEFAULT_MODELS[safeMode],
         systemPrompt:
           typeof session.systemPrompt === "string" ? session.systemPrompt : "",
@@ -119,29 +102,16 @@ function getInitialChatState() {
 function getInitialTheme() {
   try {
     const savedTheme = localStorage.getItem(THEME_KEY);
-
-    if (savedTheme === "dark" || savedTheme === "light") {
-      return savedTheme;
-    }
+    if (savedTheme === "dark" || savedTheme === "light") return savedTheme;
   } catch (error) {
     console.error("Failed to load theme:", error);
   }
-
   return "light";
 }
 
 function App() {
   const [initialChatState] = useState(getInitialChatState);
   const [theme, setTheme] = useState(getInitialTheme());
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem(SIDEBAR_KEY) === "true";
-    } catch {
-      return false;
-    }
-  });
-  const [showScrollBottom, setShowScrollBottom] = useState(false);
-
   const [sessions, setSessions] = useState(initialChatState.sessions);
   const [activeSessionId, setActiveSessionId] = useState(
     initialChatState.activeSessionId,
@@ -150,6 +120,17 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [models, setModels] = useState([]);
   const [isSystemPromptOpen, setIsSystemPromptOpen] = useState(false);
+  const [isRenameOpen, setIsRenameOpen] = useState(false);
+  const [attachedFile, setAttachedFile] = useState(null);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
 
   const chatEndRef = useRef(null);
   const abortRef = useRef(null);
@@ -164,22 +145,15 @@ function App() {
   );
 
   // =========================
-  // Save Chat Sessions
+  // Effects
   // =========================
 
   useEffect(() => {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({
-        activeSessionId,
-        sessions,
-      }),
+      JSON.stringify({ activeSessionId, sessions }),
     );
   }, [activeSessionId, sessions]);
-
-  // =========================
-  // Save Theme
-  // =========================
 
   useEffect(() => {
     localStorage.setItem(THEME_KEY, theme);
@@ -189,194 +163,105 @@ function App() {
     try {
       localStorage.setItem(SIDEBAR_KEY, String(sidebarCollapsed));
     } catch {
-      // ignore
+      // 忽略写入错误（例如隐私模式禁止 localStorage）
     }
   }, [sidebarCollapsed]);
 
-  // =========================
-  // Fetch Available Models
-  // =========================
-
   useEffect(() => {
     let cancelled = false;
-
     const fetchModels = async () => {
       try {
         const response = await fetch(MODELS_API_URL);
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
-        if (!cancelled && Array.isArray(data.models)) {
-          setModels(data.models);
-        }
+        if (!cancelled && Array.isArray(data.models)) setModels(data.models);
       } catch (error) {
         console.error("Failed to fetch model list:", error);
-        // 静默失败即可：用户仍可用默认模型
       }
     };
-
     fetchModels();
-
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // =========================
-  // Auto Scroll
-  // =========================
-
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "end",
-    });
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [activeSession?.messages, loading]);
 
   // =========================
-  // Theme
+  // Handlers
   // =========================
 
-  const toggleTheme = () => {
-    setTheme((previousTheme) => (previousTheme === "light" ? "dark" : "light"));
-  };
-
-  const toggleSidebar = () => {
-    setSidebarCollapsed((prev) => !prev);
-  };
-
-  // =========================
-  // Update Active Session
-  // =========================
+  const toggleTheme = () =>
+    setTheme((prev) => (prev === "light" ? "dark" : "light"));
+  const toggleSidebar = () => setSidebarCollapsed((prev) => !prev);
 
   const updateActiveSession = (updater) => {
-    setSessions((previousSessions) =>
-      previousSessions.map((session) => {
-        if (session.id !== activeSessionId) {
-          return session;
-        }
-
+    setSessions((prevSessions) =>
+      prevSessions.map((session) => {
+        if (session.id !== activeSessionId) return session;
         return updater(session);
       }),
     );
   };
 
-  // =========================
-  // New Chat
-  // =========================
-
   const handleNewChat = () => {
-    if (loading) {
-      return;
-    }
-
+    if (loading) return;
     const newSession = createNewSession(activeSession?.mode || "chat");
-
-    setSessions((previousSessions) => [newSession, ...previousSessions]);
-
+    setSessions((prev) => [newSession, ...prev]);
     setActiveSessionId(newSession.id);
-
     setInput("");
   };
 
-  // =========================
-  // Select Chat
-  // =========================
-
   const handleSelectSession = (sessionId) => {
-    if (loading) {
-      return;
-    }
-
+    if (loading) return;
     setActiveSessionId(sessionId);
     setInput("");
   };
 
-  // =========================
-  // Delete Chat
-  // =========================
-
   const handleDeleteSession = (event, sessionId) => {
     event.stopPropagation();
+    if (loading) return;
 
-    if (loading) {
+    const sessionToDelete = sessions.find((s) => s.id === sessionId);
+    if (!window.confirm(`Delete "${sessionToDelete?.title || "this chat"}"?`))
       return;
-    }
 
-    const sessionToDelete = sessions.find(
-      (session) => session.id === sessionId,
-    );
-
-    const shouldDelete = window.confirm(
-      `Delete "${sessionToDelete?.title || "this chat"}"?`,
-    );
-
-    if (!shouldDelete) {
-      return;
-    }
-
-    const remainingSessions = sessions.filter(
-      (session) => session.id !== sessionId,
-    );
-
+    const remainingSessions = sessions.filter((s) => s.id !== sessionId);
     if (remainingSessions.length === 0) {
       const newSession = createNewSession();
-
       setSessions([newSession]);
       setActiveSessionId(newSession.id);
       setInput("");
-
       return;
     }
 
     setSessions(remainingSessions);
-
     if (sessionId === activeSessionId) {
       setActiveSessionId(remainingSessions[0].id);
       setInput("");
     }
   };
 
-  // =========================
-  // Rename Chat
-  // =========================
+  const handleOpenRename = () => {
+    if (loading || !activeSession) return;
+    setIsRenameOpen(true);
+  };
 
-  const handleRenameSession = () => {
-    if (loading || !activeSession) {
-      return;
-    }
-
-    const newTitle = window.prompt(
-      "Enter a new chat title:",
-      activeSession.title,
-    );
-
-    const cleanedTitle = newTitle?.trim();
-
-    if (!cleanedTitle) {
-      return;
-    }
-
+  const handleSaveRename = (newTitle) => {
     updateActiveSession((session) => ({
       ...session,
-      title: cleanedTitle,
+      title: newTitle,
       updatedAt: new Date().toISOString(),
     }));
   };
 
-  // =========================
-  // Change Chat Mode
-  // =========================
-
   const handleModeChange = (event) => {
     const newMode = event.target.value;
-
     updateActiveSession((session) => {
       const oldDefault = DEFAULT_MODELS[session.mode];
-      // 只有当用户没手动改过模型（还是旧默认值）时，才自动切到新默认
       const usingOldDefault = !session.model || session.model === oldDefault;
-
       return {
         ...session,
         mode: newMode,
@@ -386,13 +271,8 @@ function App() {
     });
   };
 
-  // =========================
-  // Change Model
-  // =========================
-
   const handleModelChange = (event) => {
     const newModel = event.target.value;
-
     updateActiveSession((session) => ({
       ...session,
       model: newModel,
@@ -400,18 +280,12 @@ function App() {
     }));
   };
 
-  // =========================
-  // System Prompt Dialog
-  // =========================
-
   const handleOpenSystemPrompt = () => {
     if (loading) return;
     setIsSystemPromptOpen(true);
   };
 
-  const handleCloseSystemPrompt = () => {
-    setIsSystemPromptOpen(false);
-  };
+  const handleCloseSystemPrompt = () => setIsSystemPromptOpen(false);
 
   const handleSaveSystemPrompt = (text) => {
     updateActiveSession((session) => ({
@@ -421,9 +295,13 @@ function App() {
     }));
   };
 
-  // ============================================================
+  const handleStop = () => {
+    abortRef.current?.abort();
+  };
+
+  // =========================
   // Streaming Helper
-  // ============================================================
+  // =========================
 
   const streamChatResponse = async ({
     sessionId,
@@ -437,9 +315,7 @@ function App() {
   }) => {
     const response = await fetch(API_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         sessionId,
         message,
@@ -453,65 +329,38 @@ function App() {
 
     if (!response.ok) {
       let errorMessage = "Unable to connect to the backend or Ollama.";
-
       try {
         const errorData = await response.json();
-
-        if (errorData.error) {
-          errorMessage = errorData.error;
-        }
+        if (errorData.error) errorMessage = errorData.error;
       } catch {
-        // Ignore JSON parsing error
+        // 如果解析 JSON 失败，就保留默认的 errorMessage
       }
-
       throw new Error(errorMessage);
     }
 
-    if (!response.body) {
+    if (!response.body)
       throw new Error("Streaming response is not supported by this browser.");
-    }
 
     const reader = response.body.getReader();
-
     const decoder = new TextDecoder("utf-8");
-
     let buffer = "";
     let finished = false;
 
     while (!finished) {
       const { value, done } = await reader.read();
+      if (done) break;
 
-      if (done) {
-        break;
-      }
-
-      buffer += decoder.decode(value, {
-        stream: true,
-      });
-
+      buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
-
-      // Keep the last incomplete line in the buffer
       buffer = lines.pop() || "";
 
       for (const line of lines) {
         const trimmedLine = line.trim();
-
-        if (!trimmedLine) {
-          continue;
-        }
-
+        if (!trimmedLine) continue;
         try {
           const data = JSON.parse(trimmedLine);
-
-          if (data.error) {
-            throw new Error(data.error);
-          }
-
-          if (data.content) {
-            onChunk(data.content);
-          }
-
+          if (data.error) throw new Error(data.error);
+          if (data.content) onChunk(data.content);
           if (data.done) {
             finished = true;
             break;
@@ -522,18 +371,11 @@ function App() {
       }
     }
 
-    // Process any remaining data
     if (buffer.trim()) {
       try {
         const data = JSON.parse(buffer.trim());
-
-        if (data.error) {
-          throw new Error(data.error);
-        }
-
-        if (data.content) {
-          onChunk(data.content);
-        }
+        if (data.error) throw new Error(data.error);
+        if (data.content) onChunk(data.content);
       } catch (error) {
         console.error("Failed to parse final streaming chunk:", error);
       }
@@ -546,14 +388,8 @@ function App() {
 
   const handleSendMessage = async () => {
     const userText = input.trim();
-
-    if (!userText || loading || !activeSession) {
-      return;
-    }
-
-    if (abortRef.current) {
-      return;
-    }
+    if ((!userText && !attachedFile) || loading || !activeSession) return;
+    if (abortRef.current) return;
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -561,35 +397,44 @@ function App() {
     const sessionId = activeSession.id;
     const sessionMode = activeSession.mode;
 
+    // 构造 UI 显示的消息对象
     const userMessage = {
       role: "user",
-      content: userText,
+      content: userText || "请帮我分析这个文件。",
+      file: attachedFile?.name,
       createdAt: new Date().toISOString(),
     };
 
-    const conversationMessages = [...activeSession.messages, userMessage];
+    // 清理历史消息中的 file 标识，只保留纯文本发给 AI
+    const cleanHistory = activeSession.messages.map((msg) => {
+      if (msg.role === "user") return { role: "user", content: msg.content };
+      return msg;
+    });
 
-    // Clear input immediately
+    // 构造发给后端的强提示（如果有附件）
+    let textToSend = userText;
+    if (attachedFile) {
+      textToSend = `[SYSTEM NOTE: The user has uploaded a file named "${attachedFile.name}". Here is the file content:]\n\`\`\`\n${attachedFile.content}\n\`\`\`\n\n[User Question]:\n${userText || "Please analyze this file."}`;
+    }
+
+    const conversationMessages = [
+      ...cleanHistory,
+      { role: "user", content: textToSend },
+    ];
+
     setInput("");
-
-    // Start loading
+    setAttachedFile(null);
     setLoading(true);
 
-    // Add user message + empty assistant message
-    setSessions((previousSessions) =>
-      previousSessions.map((session) => {
-        if (session.id !== sessionId) {
-          return session;
-        }
-
+    setSessions((prevSessions) =>
+      prevSessions.map((session) => {
+        if (session.id !== sessionId) return session;
         return {
           ...session,
-
           title:
             session.messages.length === 0
-              ? getTitleFromMessage(userText)
+              ? getTitleFromMessage(userMessage.content)
               : session.title,
-
           messages: [
             ...session.messages,
             userMessage,
@@ -599,7 +444,6 @@ function App() {
               createdAt: new Date().toISOString(),
             },
           ],
-
           updatedAt: new Date().toISOString(),
         };
       }),
@@ -608,35 +452,24 @@ function App() {
     try {
       await streamChatResponse({
         sessionId,
-        message: userText,
+        message: textToSend,
         mode: sessionMode,
         model: activeSession.model,
         systemPrompt: activeSession.systemPrompt,
         messages: conversationMessages,
         signal: controller.signal,
-
         onChunk: (content) => {
-          setSessions((previousSessions) =>
-            previousSessions.map((session) => {
-              if (session.id !== sessionId) {
-                return session;
-              }
-
+          setSessions((prevSessions) =>
+            prevSessions.map((session) => {
+              if (session.id !== sessionId) return session;
               const messages = [...session.messages];
-
               const lastMessageIndex = messages.length - 1;
-
               const lastMessage = messages[lastMessageIndex];
-
-              if (lastMessage?.role !== "assistant") {
-                return session;
-              }
-
+              if (lastMessage?.role !== "assistant") return session;
               messages[lastMessageIndex] = {
                 ...lastMessage,
                 content: `${lastMessage.content}${content}`,
               };
-
               return {
                 ...session,
                 messages,
@@ -648,17 +481,12 @@ function App() {
       });
     } catch (error) {
       if (controller.signal.aborted) {
-        setSessions((previousSessions) =>
-          previousSessions.map((session) => {
+        setSessions((prevSessions) =>
+          prevSessions.map((session) => {
             if (session.id !== sessionId) return session;
-
             const messages = [...session.messages];
             const last = messages[messages.length - 1];
-
-            if (last?.role === "assistant" && !last.content) {
-              messages.pop();
-            }
-
+            if (last?.role === "assistant" && !last.content) messages.pop();
             return {
               ...session,
               messages,
@@ -668,24 +496,16 @@ function App() {
         );
       } else {
         console.error("Chat request failed:", error);
-
         const errorMessage =
-          error.message ||
-          "Unable to connect to the backend or Ollama. Please check that both services are running.";
-
-        setSessions((previousSessions) =>
-          previousSessions.map((session) => {
-            if (session.id !== sessionId) {
-              return session;
-            }
-
+          error.message || "Unable to connect to the backend or Ollama.";
+        setSessions((prevSessions) =>
+          prevSessions.map((session) => {
+            if (session.id !== sessionId) return session;
             const messages = [...session.messages];
-            const lastMessageIndex = messages.length - 1;
-            const lastMessage = messages[lastMessageIndex];
-
-            if (lastMessage?.role === "assistant") {
-              messages[lastMessageIndex] = {
-                ...lastMessage,
+            const lastIdx = messages.length - 1;
+            if (messages[lastIdx]?.role === "assistant") {
+              messages[lastIdx] = {
+                ...messages[lastIdx],
                 content: `**Error:** ${errorMessage}`,
               };
             } else {
@@ -694,7 +514,6 @@ function App() {
                 content: `**Error:** ${errorMessage}`,
               });
             }
-
             return {
               ...session,
               messages,
@@ -704,25 +523,19 @@ function App() {
         );
       }
     } finally {
-      abortRef.current = null; // ← 新增
+      abortRef.current = null;
       setLoading(false);
     }
   };
 
   // =========================
-  // Edit Message
+  // Edit & Regenerate
   // =========================
 
   const handleEditMessage = async (messageIndex, newContent) => {
     const editedText = newContent.trim();
-
-    if (!editedText || loading || !activeSession) {
-      return;
-    }
-
-    if (abortRef.current) {
-      return;
-    }
+    if (!editedText || loading || !activeSession) return;
+    if (abortRef.current) return;
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -740,12 +553,9 @@ function App() {
 
     setLoading(true);
 
-    setSessions((previousSessions) =>
-      previousSessions.map((session) => {
-        if (session.id !== sessionId) {
-          return session;
-        }
-
+    setSessions((prevSessions) =>
+      prevSessions.map((session) => {
+        if (session.id !== sessionId) return session;
         return {
           ...session,
           messages: [
@@ -770,27 +580,18 @@ function App() {
         systemPrompt: activeSession.systemPrompt,
         messages: updatedMessages,
         signal: controller.signal,
-
         onChunk: (content) => {
-          setSessions((previousSessions) =>
-            previousSessions.map((session) => {
-              if (session.id !== sessionId) {
-                return session;
-              }
-
+          setSessions((prevSessions) =>
+            prevSessions.map((session) => {
+              if (session.id !== sessionId) return session;
               const messages = [...session.messages];
-              const lastMessageIndex = messages.length - 1;
-              const lastMessage = messages[lastMessageIndex];
-
-              if (lastMessage?.role !== "assistant") {
-                return session;
-              }
-
-              messages[lastMessageIndex] = {
-                ...lastMessage,
-                content: `${lastMessage.content}${content}`,
+              const lastIdx = messages.length - 1;
+              const last = messages[lastIdx];
+              if (last?.role !== "assistant") return session;
+              messages[lastIdx] = {
+                ...last,
+                content: `${last.content}${content}`,
               };
-
               return {
                 ...session,
                 messages,
@@ -802,18 +603,12 @@ function App() {
       });
     } catch (error) {
       if (controller.signal.aborted) {
-        // ← 新增分支
-        setSessions((previousSessions) =>
-          previousSessions.map((session) => {
+        setSessions((prevSessions) =>
+          prevSessions.map((session) => {
             if (session.id !== sessionId) return session;
-
             const messages = [...session.messages];
             const last = messages[messages.length - 1];
-
-            if (last?.role === "assistant" && !last.content) {
-              messages.pop();
-            }
-
+            if (last?.role === "assistant" && !last.content) messages.pop();
             return {
               ...session,
               messages,
@@ -823,28 +618,19 @@ function App() {
         );
       } else {
         console.error("Edit chat request failed:", error);
-
         const errorMessage =
-          error.message ||
-          "Unable to connect to the backend or Ollama. Please check that both services are running.";
-
-        setSessions((previousSessions) =>
-          previousSessions.map((session) => {
-            if (session.id !== sessionId) {
-              return session;
-            }
-
+          error.message || "Unable to connect to the backend or Ollama.";
+        setSessions((prevSessions) =>
+          prevSessions.map((session) => {
+            if (session.id !== sessionId) return session;
             const messages = [...session.messages];
-            const lastMessageIndex = messages.length - 1;
-            const lastMessage = messages[lastMessageIndex];
-
-            if (lastMessage?.role === "assistant") {
-              messages[lastMessageIndex] = {
-                ...lastMessage,
+            const lastIdx = messages.length - 1;
+            if (messages[lastIdx]?.role === "assistant") {
+              messages[lastIdx] = {
+                ...messages[lastIdx],
                 content: `**Error:** ${errorMessage}`,
               };
             }
-
             return {
               ...session,
               messages,
@@ -859,108 +645,78 @@ function App() {
     }
   };
 
-  // =========================
-  // Regenerate Response
-  // =========================
   const handleRegenerate = (assistantIndex) => {
     if (loading || !activeSession || abortRef.current) return;
-
     const messages = activeSession.messages;
     const userIndex = assistantIndex - 1;
+    if (userIndex < 0) return;
 
-    // 如果是用户发的消息触发了重发（传进来的是 user 的下标），修正一下
     let targetUserIndex = userIndex;
-    if (messages[assistantIndex]?.role === "user") {
+    if (messages[assistantIndex]?.role === "user")
       targetUserIndex = assistantIndex;
-    }
 
     const userMessage = messages[targetUserIndex];
     if (!userMessage || userMessage.role !== "user") return;
 
-    // 如果点击的不是最后一条，确认是否截断后续对话
     const isLastMessage = targetUserIndex === messages.length - 2;
     if (!isLastMessage) {
       if (
         !window.confirm(
           "Regenerating this will remove all messages after it. Continue?",
         )
-      ) {
+      )
         return;
-      }
     }
-
-    // 复用编辑消息的逻辑，相当于用一模一样的文字重新发送
     handleEditMessage(targetUserIndex, userMessage.content);
   };
 
-  // =========================
-  // Stop Generation
-  // =========================
-
-  const handleStop = () => {
-    abortRef.current?.abort();
+  const handleKeyDown = (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      handleSendMessage();
+    }
   };
 
-  // 全局快捷键
+  // =========================
+  // Global Shortcuts
+  // =========================
+
   useEffect(() => {
     const handleGlobalKeyDown = (e) => {
-      // 1. 👇 Ctrl+K 必须放在最前面，且必须拦截浏览器默认行为
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault(); // 阻止 Chrome 聚焦地址栏
-        e.stopPropagation(); // 阻止事件冒泡
-
+        e.preventDefault();
+        e.stopPropagation();
         if (sidebarCollapsed) {
           setSidebarCollapsed(false);
           setTimeout(() => searchInputRef.current?.focus(), 260);
         } else {
           searchInputRef.current?.focus();
         }
-        return; // 执行完直接结束，不往下走
+        return;
       }
 
-      // 2. 判断用户是否正在输入框打字
       const isTyping = ["INPUT", "TEXTAREA"].includes(
         document.activeElement.tagName,
       );
-      // 如果在打字，且按的不是 Esc，就不触发其他全局快捷键（比如 Alt+N）
       if (isTyping && e.key !== "Escape") return;
 
-      // 3. Alt + N: 新建聊天
       if (e.altKey && e.key.toLowerCase() === "n") {
         e.preventDefault();
         handleNewChat();
       }
 
-      // 4. Esc: 停止生成
       if (e.key === "Escape") {
-        if (loading) {
-          handleStop();
-        }
+        if (loading) handleStop();
       }
     };
 
-    window.addEventListener("keydown", handleGlobalKeyDown, { capture: true }); // 👈 加上 capture 抢先拦截
-
-    return () => {
+    window.addEventListener("keydown", handleGlobalKeyDown, { capture: true });
+    return () =>
       window.removeEventListener("keydown", handleGlobalKeyDown, {
         capture: true,
       });
-    };
-
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, sidebarCollapsed]);
-
-  // =========================
-  // Keyboard
-  // =========================
-
-  const handleKeyDown = (event) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-
-      handleSendMessage();
-    }
-  };
 
   // =========================
   // UI
@@ -978,7 +734,7 @@ function App() {
           onNewChat={handleNewChat}
           onSelectSession={handleSelectSession}
           onDeleteSession={handleDeleteSession}
-          onRenameSession={handleRenameSession}
+          onRenameSession={handleOpenRename}
           searchInputRef={searchInputRef}
         />
 
@@ -989,19 +745,18 @@ function App() {
             theme={theme}
             models={models}
             onToggleSidebar={toggleSidebar}
-            onOpenSystemPrompt={handleOpenSystemPrompt}
             onModeChange={handleModeChange}
             onModelChange={handleModelChange}
-            onRenameSession={handleRenameSession}
+            onRenameSession={handleOpenRename}
             onToggleTheme={toggleTheme}
+            onOpenSystemPrompt={handleOpenSystemPrompt}
           />
 
           <div
             style={themeStyles.messagesArea}
-            id="chat-scroll-container" // 👈 加 id
+            id="chat-scroll-container"
             onScroll={(e) => {
               const { scrollTop, scrollHeight, clientHeight } = e.target;
-              // 距离底部超过 300px 时显示按钮
               setShowScrollBottom(
                 scrollHeight - scrollTop - clientHeight > 300,
               );
@@ -1019,24 +774,22 @@ function App() {
             </div>
           </div>
 
-          {/* 👇 滚动到底部按钮 */}
           {showScrollBottom && (
             <button
               onClick={() => {
                 const container = document.getElementById(
                   "chat-scroll-container",
                 );
-                if (container) {
+                if (container)
                   container.scrollTo({
                     top: container.scrollHeight,
                     behavior: "smooth",
                   });
-                }
               }}
               style={{
                 position: "absolute",
-                bottom: "120px", // 悬浮在输入框上方
-                right: "calc(50% - 410px)", // 820px 容器宽度的右侧
+                bottom: "120px",
+                right: "calc(50% - 410px)",
                 width: 36,
                 height: 36,
                 borderRadius: "50%",
@@ -1056,6 +809,7 @@ function App() {
               <span style={{ fontSize: "18px", fontWeight: "bold" }}>↓</span>
             </button>
           )}
+
           <div style={themeStyles.inputArea}>
             <div style={themeStyles.inputInner}>
               <ChatInput
@@ -1063,6 +817,9 @@ function App() {
                 loading={loading}
                 activeSession={activeSession}
                 theme={theme}
+                attachedFile={attachedFile}
+                onAttachFile={setAttachedFile}
+                onRemoveFile={() => setAttachedFile(null)}
                 onInputChange={setInput}
                 onKeyDown={handleKeyDown}
                 onSendMessage={handleSendMessage}
@@ -1071,16 +828,26 @@ function App() {
             </div>
           </div>
         </div>
+
+        <SystemPromptDialog
+          key={`${activeSession?.id}-${isSystemPromptOpen ? "open" : "closed"}`}
+          open={isSystemPromptOpen}
+          initialValue={activeSession?.systemPrompt || ""}
+          mode={activeSession?.mode || "chat"}
+          theme={theme}
+          onClose={handleCloseSystemPrompt}
+          onSave={handleSaveSystemPrompt}
+        />
+
+        <RenameDialog
+          key={`${activeSession?.id}-${isRenameOpen ? "open" : "closed"}`}
+          open={isRenameOpen}
+          initialTitle={activeSession?.title || ""}
+          theme={theme}
+          onClose={() => setIsRenameOpen(false)}
+          onSave={handleSaveRename}
+        />
       </section>
-      <SystemPromptDialog
-        key={`${activeSession?.id}-${isSystemPromptOpen ? "open" : "closed"}`}
-        open={isSystemPromptOpen}
-        initialValue={activeSession?.systemPrompt || ""}
-        mode={activeSession?.mode || "chat"}
-        theme={theme}
-        onClose={handleCloseSystemPrompt}
-        onSave={handleSaveSystemPrompt}
-      />
     </main>
   );
 }

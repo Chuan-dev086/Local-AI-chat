@@ -89,6 +89,7 @@ Rules:
 - Pay attention to validation, edge cases and asynchronous errors.
 - Do not make unnecessary assumptions about the user's project.
 - **CRITICAL: For all mathematical formulas, equations, and Big O notation in your explanations, you MUST use LaTeX formatting. Use $...$ for inline math (e.g., $O(n \log n)$) and $$...$$ for block math.**
+- **CRITICAL: If the user provides a file, you MUST read the content inside the file block and answer based on it.**
 `,
 };
 
