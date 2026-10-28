@@ -18,6 +18,7 @@ import RenameDialog from "./components/RenameDialog";
 import { getThemeStyles } from "./theme/theme";
 import {
   ChatApiError,
+  clearChat,
   fetchModels,
   isAbortError,
   streamChat,
@@ -473,6 +474,29 @@ function App() {
     }));
   };
 
+  const handleClearChat = async () => {
+    if (loading || !activeSession || activeSession.messages.length === 0) return;
+    if (!window.confirm("Clear all messages in this chat?")) return;
+
+    const sessionId = activeSession.id;
+    try {
+      await clearChat(sessionId);
+      patchSession(sessionId, (session) => ({
+        ...session,
+        title: "New Chat",
+        messages: [],
+        updatedAt: nowIso(),
+      }));
+      setInput("");
+      setNotice({ severity: "success", message: "Chat cleared." });
+    } catch (error) {
+      setNotice({
+        severity: "error",
+        message: error instanceof Error ? error.message : "Failed to clear chat.",
+      });
+    }
+  };
+
   const handleModeChange = (event) => {
     const newMode = event.target.value;
     updateActiveSession((session) => {
@@ -897,6 +921,7 @@ function App() {
             onRenameSession={handleOpenRename}
             onToggleTheme={toggleTheme}
             onOpenSystemPrompt={handleOpenSystemPrompt}
+            onClearChat={handleClearChat}
           />
 
           <div
@@ -965,7 +990,7 @@ function App() {
         </div>
 
         <SystemPromptDialog
-          key={`${activeSession?.id}-${isSystemPromptOpen ? "open" : "closed"}`}
+          key={`system-prompt-${activeSession?.id}-${isSystemPromptOpen ? "open" : "closed"}`}
           open={isSystemPromptOpen}
           initialValue={activeSession?.systemPrompt || ""}
           mode={activeSession?.mode || "chat"}
@@ -975,7 +1000,7 @@ function App() {
         />
 
         <RenameDialog
-          key={`${activeSession?.id}-${isRenameOpen ? "open" : "closed"}`}
+          key={`rename-${activeSession?.id}-${isRenameOpen ? "open" : "closed"}`}
           open={isRenameOpen}
           initialTitle={activeSession?.title || ""}
           theme={theme}

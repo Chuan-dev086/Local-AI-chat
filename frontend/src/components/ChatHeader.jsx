@@ -22,6 +22,7 @@ import {
   Settings,
   DriveFileRenameOutline,
   Download,
+  Delete,
 } from "@mui/icons-material";
 import { getChatHeaderStyles, getThemeStyles } from "../theme/theme";
 
@@ -36,6 +37,7 @@ function ChatHeader({
   onRenameSession,
   onToggleTheme,
   onOpenSystemPrompt,
+  onClearChat,
 }) {
   const { isDark } = getThemeStyles(theme);
   const styles = getChatHeaderStyles(theme);
@@ -267,6 +269,18 @@ function ChatHeader({
               <Download fontSize="small" />
             </ListItemIcon>
             <ListItemText primary="Export Markdown" />
+          </MenuItem>
+          <MenuItem
+            disabled={!activeSession?.messages.length}
+            onClick={() => {
+              handleMenuClose();
+              onClearChat();
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 32 }}>
+              <Delete fontSize="small" />
+            </ListItemIcon>
+            <ListItemText primary="Clear Current Chat" />
           </MenuItem>
         </Menu>
       </header>
