@@ -85,12 +85,12 @@ function Sidebar({
               <Typography variant="body2">No chats found.</Typography>
             </Box>
           ) : (
-            filteredSessions.map((session) => {
+            filteredSessions.map((session, index) => {
               const isActive = session.id === activeSessionId;
 
               return (
                 <div
-                  key={session.id}
+                  key={`${session.id}-${index}`}
                   role="button"
                   tabIndex={0}
                   onClick={() => onSelectSession(session.id)}

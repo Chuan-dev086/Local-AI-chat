@@ -150,7 +150,14 @@ function ChatInput({
         <IconButton
           onClick={() => fileInputRef.current?.click()}
           disabled={loading}
-          sx={{ ml: 1, mb: 0.5, color: "text.secondary" }}
+          sx={{
+            ml: 1,
+            mb: 0.5,
+            color: theme === "dark" ? "#cbd5e1" : "text.secondary",
+            "&:hover": {
+              color: theme === "dark" ? "#f1f5f9" : "text.primary",
+            },
+          }}
         >
           <AttachFile fontSize="small" />
         </IconButton>
@@ -160,7 +167,13 @@ function ChatInput({
           title="Prompt templates"
           onClick={(event) => setPromptMenuAnchor(event.currentTarget)}
           disabled={loading}
-          sx={{ mb: 0.5, color: "text.secondary" }}
+          sx={{
+            mb: 0.5,
+            color: theme === "dark" ? "#cbd5e1" : "text.secondary",
+            "&:hover": {
+              color: theme === "dark" ? "#f1f5f9" : "text.primary",
+            },
+          }}
         >
           <AutoAwesome fontSize="small" />
         </IconButton>
@@ -168,10 +181,24 @@ function ChatInput({
           anchorEl={promptMenuAnchor}
           open={Boolean(promptMenuAnchor)}
           onClose={() => setPromptMenuAnchor(null)}
+          slotProps={{
+            paper: {
+              sx: {
+                bgcolor: theme === "dark" ? "#1e293b" : "background.paper",
+                color: theme === "dark" ? "#e2e8f0" : "text.primary",
+              },
+            },
+          }}
         >
           {PROMPT_TEMPLATES.map((template) => (
             <MenuItem
               key={template.name}
+              sx={{
+                color: theme === "dark" ? "#e2e8f0" : "text.primary",
+                "&:hover": {
+                  bgcolor: theme === "dark" ? "#334155" : "action.hover",
+                },
+              }}
               onClick={() => {
                 onSelectPromptTemplate?.(template.prompt);
                 setPromptMenuAnchor(null);
