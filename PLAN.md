@@ -13,31 +13,31 @@
 | [x]  | Multi-turn Context                           | —      | —     | 保持会话多轮上下文                                       |
 | [x]  | Per-session Model Selection / 模型选择器     | P7     | 中    | 在会话内切换本地 Ollama 模型                             |
 | [x]  | Custom System Prompts / 自定义 system prompt | P8     | 低—中 | 为单个会话定义 AI 行为                                   |
-| [ ]  | Preset Prompt Templates                      | —      | —     | Quick Win：下拉选择“Python Expert”“Socratic Tutor”等预设 |
+| [x]  | Preset Prompt Templates                      | —      | —     | 下拉选择“Python Expert”“Writing Assistant”等预设角色模型 |
 | [ ]  | Smart Auto-Scroll & Jump to Bottom           | —      | —     | 流式输出时防止滚动劫持，并提供“回到底部”按钮             |
-| [ ]  | Auto-Generate Chat Titles / 自动会话标题     | P3     | 低    | 用首条问题或轻量本地模型生成/截断标题                    |
+| [x]  | Auto-Generate Chat Titles / 自动会话标题     | P3     | 低    | 第一条消息发送时，前端自动截取前 12 个字更新为会话标题   |
 | [ ]  | Token-based Dynamic Context Truncation       | —      | —     | 按 token 限制智能截断历史，避免长输入 OOM                |
 | [ ]  | Multi-Model Arena                            | —      | —     | 两个本地模型并排回答同一提示，便于比较                   |
-| [ ]  | 多会话 Sidebar                               | P1     | 中    | 像 ChatGPT 一样管理不同主题的聊天                        |
-| [ ]  | 删除、重命名会话                             | P4     | 低—中 | 更好管理聊天记录                                         |
-| [ ]  | 清空当前聊天                                 | P10    | 低    | 不删除会话，只删除该会话的消息                           |
+| [x]  | 多会话 Sidebar                               | P1     | 中    | 像 ChatGPT 一样管理不同主题的聊天，修复了乱码模式图标    |
+| [x]  | 删除、重命名会话                             | P4     | 低—中 | 支持侧边栏无缝双击行内编辑重命名与删除后会话焦点智能切换 |
+| [x]  | 清空当前聊天                                 | P10    | 低    | 不删除会话，顶部添加带确认的垃圾桶按钮一键清空消息队列   |
 
 ## 🧠 Advanced AI Capabilities & Settings
 
-| 状态 | 功能                            | 优先级 | 难度  | 价值 / 说明                                               |
-| ---- | ------------------------------- | ------ | ----- | --------------------------------------------------------- |
-| [ ]  | Advanced Parameter Tuning UI    | —      | —     | 暴露 `temperature`、`top_p`、`top_k`、`num_ctx` 滑块      |
-| [ ]  | 设置页                          | P17    | 中    | 配置模型、端口、默认模式、回答语言；可承载参数调优        |
-| [ ]  | Multimodal Support (Vision)     | —      | —     | 图片上传并以 base64 传给 `llava`、`qwen2.5-vl` 等视觉模型 |
-| [ ]  | Local Function Calling / Agents | —      | —     | 调用本地工具：读文件、沙箱 Python、获取本地时间等         |
-| [ ]  | Voice I/O / 语音输入与朗读      | P18    | 中—高 | Web Speech API 实现 STT 输入与 TTS 输出                   |
+| 状态 | 功能                            | 优先级 | 难度  | 价值 / 说明                                                                                                  |
+| ---- | ------------------------------- | ------ | ----- | ------------------------------------------------------------------------------------------------------------ |
+| [ ]  | Advanced Parameter Tuning UI    | —      | —     | 暴露 `temperature`、`top_p`、`top_k`、`num_ctx` 滑块                                                         |
+| [ ]  | 设置页                          | P17    | 中    | 配置模型、端口、默认模式、回答语言；可承载参数调优                                                           |
+| [x]  | Multimodal Support (Vision)     | —      | —     | 支持拖拽/上传图片并转 base64 预览渲染，后端支持 20MB 扩容与智能模型轮换路由（自动路由到 qwen2.5vl:3b/llava） |
+| [ ]  | Local Function Calling / Agents | —      | —     | 调用本地工具：读文件、沙箱 Python、获取本地时间等                                                            |
+| [ ]  | Voice I/O / 语音输入与朗读      | P18    | 中—高 | Web Speech API 实现 STT 输入与 TTS 输出                                                                      |
 
 ## 📚 Knowledge & RAG
 
 | 状态 | 功能                         | 优先级 | 难度  | 价值 / 说明                                                 |
 | ---- | ---------------------------- | ------ | ----- | ----------------------------------------------------------- |
 | [ ]  | RAG Context Indicator        | —      | —     | Quick Win：使用文档时显示“📎 Referenced 3 local chunks”徽标 |
-| [ ]  | 文件上传与多格式文档解析     | P12    | 中—高 | 上传 txt、md、PDF、DOCX、CSV，让 AI 基于文件回答            |
+| [ ]  | 文件上传与多格式文档解析     | P12    | 中—高 | 上传 txt、md.. PDF、DOCX、CSV，让 AI 基于文件回答           |
 | [ ]  | Visual Citations             | —      | —     | AI 回答中可点击脚注 `[1]`，侧栏高亮来源段落                 |
 | [ ]  | RAG 知识库与本地向量库       | P13    | 高    | 从多份笔记检索后回答；集成 LanceDB、ChromaDB 或 SQLite-VSS  |
 | [ ]  | Knowledge Base Management UI | —      | —     | 查看、删除、手动重建上传文档索引                            |
@@ -59,12 +59,12 @@
 
 ## 🛠️ System, Architecture & Engineering
 
-| 状态 | 功能                                              | 优先级 | 难度 | 价值 / 说明                                                                                     |
-| ---- | ------------------------------------------------- | ------ | ---- | ----------------------------------------------------------------------------------------------- |
-| [x]  | Modular Backend                                   | —      | —    | 路由、控制器、Ollama 代理逻辑清晰分离                                                           |
-| [x]  | Environment Variables                             | —      | —    | 通过 `.env` 文件安全配置                                                                        |
-| [ ]  | 持久化存储升级：完整会话持久化与 SQLite/IndexedDB | P2/P16 | 中   | 先实现全量 localStorage 保存所有会话；长期迁移 IndexedDB 或 SQLite，突破 5MB 限制并支持复杂查询 |
-| [ ]  | Desktop App Packaging (Tauri/Electron)            | —      | —    | 打包前端、后端与内嵌 Ollama 为 `.exe` / `.dmg`                                                  |
-| [ ]  | Docker Compose Setup                              | —      | —    | 一键部署前端、后端与向量数据库                                                                  |
-| [ ]  | TypeScript Migration                              | —      | —    | 渐进迁移前后端到 TypeScript                                                                     |
-| [ ]  | Automated Testing                                 | —      | —    | 使用 Vitest/Jest 测试上下文截断、文本分块等核心逻辑                                             |
+| 状态 | 功能                                              | 优先级 | 难度 | 价值 / 说明                                                                                        |
+| ---- | ------------------------------------------------- | ------ | ---- | -------------------------------------------------------------------------------------------------- |
+| [x]  | Modular Backend                                   | —      | —    | 路由、控制器、Ollama 代理逻辑清晰分离                                                              |
+| [x]  | Environment Variables                             | —      | —    | 通过 `.env` 文件 safe 配置                                                                         |
+| [x]  | 持久化存储升级：完整会话持久化与 SQLite/IndexedDB | P2/P16 | 中   | 成功构建原生无依赖的 IndexedDB 异步底层队列锁驱动，全面平滑迁移 localStorage 旧数据并突破 5MB 限制 |
+| [ ]  | Desktop App Packaging (Tauri/Electron)            | —      | —    | 打包前端、后端与内嵌 Ollama 为 `.exe` / `.dmg`                                                     |
+| [ ]  | Docker Compose Setup                              | —      | —    | 一键部署前端、后端与向量数据库                                                                     |
+| [ ]  | TypeScript Migration                              | —      | —    | 渐进迁移前后端到 TypeScript                                                                        |
+| [ ]  | Automated Testing                                 | —      | —    | 使用 Vitest/Jest 测试上下文截断、文本分块等核心逻辑                                                |
