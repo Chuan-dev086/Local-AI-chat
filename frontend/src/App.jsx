@@ -475,6 +475,15 @@ function App() {
     setInput("");
   };
 
+  const handleRenameSession = (sessionId, title) => {
+    if (loading) return;
+    patchSession(sessionId, (session) => ({
+      ...session,
+      title,
+      updatedAt: nowIso(),
+    }));
+  };
+
   const handleDeleteSession = (event, sessionId) => {
     event.stopPropagation();
     if (loading) return;
@@ -927,7 +936,7 @@ function App() {
           onNewChat={handleNewChat}
           onSelectSession={handleSelectSession}
           onDeleteSession={handleDeleteSession}
-          onRenameSession={handleOpenRename}
+          onRenameSession={handleRenameSession}
           searchInputRef={searchInputRef}
         />
 

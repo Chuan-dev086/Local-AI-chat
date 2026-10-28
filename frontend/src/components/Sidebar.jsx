@@ -1,6 +1,6 @@
 // src/components/Sidebar.jsx
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Button,
   TextField,
@@ -27,6 +27,27 @@ function Sidebar({
   const styles = getSidebarStyles(theme, collapsed);
   const { colors } = getThemeStyles(theme); // 👈 获取颜色配置
   const [searchQuery, setSearchQuery] = useState("");
+  const [editingSessionId, setEditingSessionId] = useState(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const renameInputRef = useRef(null);
+
+  const startRename = (event, session) => {
+    event.stopPropagation();
+    setEditingSessionId(session.id);
+    setEditingTitle(session.title);
+    requestAnimationFrame(() => {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    });
+  };
+
+  const finishRename = (sessionId) => {
+    const title = editingTitle.trim();
+    setEditingSessionId(null);
+    if (title && title !== sessions.find((session) => session.id === sessionId)?.title) {
+      onRenameSession?.(sessionId, title);
+    }
+  };
 
   // 过滤逻辑：搜标题 或 搜消息内容
   const filteredSessions = sessions.filter((session) => {
@@ -86,12 +107,12 @@ function Sidebar({
               <Typography variant="body2">No chats found.</Typography>
             </Box>
           ) : (
-            filteredSessions.map((session, index) => {
+            filteredSessions.map((session) => {
               const isActive = session.id === activeSessionId;
 
               return (
                 <div
-                  key={`${session.id}-${index}`}
+                  key={session.id}
                   role="button"
                   tabIndex={0}
                   onClick={() => onSelectSession(session.id)}
@@ -102,17 +123,38 @@ function Sidebar({
                   }}
                   style={styles.sessionItem(isActive, loading)}
                 >
-                  <span
-                    title={session.title}
-                    style={styles.sessionTitle(isActive)}
-                    onDoubleClick={(e) => {
-                      e.stopPropagation(); // 👈 阻止触发点击选中事件
-                      if (onRenameSession) onRenameSession();
-                    }}
-                  >
-                    {session.mode === "code" ? "💻 " : "💬 "}
-                    {session.title}
-                  </span>
+                  {editingSessionId === session.id ? (
+                    <TextField
+                      inputRef={renameInputRef}
+                      value={editingTitle}
+                      onChange={(event) => setEditingTitle(event.target.value)}
+                      onClick={(event) => event.stopPropagation()}
+                      onDoubleClick={(event) => event.stopPropagation()}
+                      onBlur={() => finishRename(session.id)}
+                      onKeyDown={(event) => {
+                        event.stopPropagation();
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          finishRename(session.id);
+                        } else if (event.key === "Escape") {
+                          setEditingSessionId(null);
+                        }
+                      }}
+                      size="small"
+                      variant="standard"
+                      inputProps={{ "aria-label": `Rename ${session.title}` }}
+                      sx={{ flex: 1, minWidth: 0, "& input": { py: 0.25, fontSize: 14 } }}
+                    />
+                  ) : (
+                    <span
+                      title={session.title}
+                      style={styles.sessionTitle(isActive)}
+                      onDoubleClick={(event) => startRename(event, session)}
+                    >
+                      {session.mode === "code" ? "\u{1F4BB} " : "\u{1F4AC} "}
+                      {session.title}
+                    </span>
+                  )}
 
                   <button
                     type="button"
