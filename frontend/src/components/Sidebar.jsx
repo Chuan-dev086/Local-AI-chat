@@ -9,6 +9,7 @@ import {
   Typography,
 } from "@mui/material";
 import { Search } from "@mui/icons-material";
+import { clearChatState } from "../store/chatStorage";
 import { getSidebarStyles, getThemeStyles } from "../theme/theme"; // 👈 引入 getThemeStyles
 
 function Sidebar({
@@ -135,8 +136,12 @@ function Sidebar({
             type="button"
             onClick={() => {
               if (window.confirm("确定要清空所有聊天记录吗？此操作不可逆。")) {
-                localStorage.removeItem("local_ai_chat_sessions_v2");
-                window.location.reload(); // 刷新页面重置状态
+                clearChatState().then(() => {
+                  localStorage.removeItem("local_ai_chat_sessions_v2");
+                  window.location.reload();
+                }).catch((error) => {
+                  console.warn("Could not clear saved chats:", error);
+                });
               }
             }}
             style={{

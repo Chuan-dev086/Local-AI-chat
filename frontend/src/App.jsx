@@ -28,6 +28,7 @@ import {
   setStorageError,
   subscribeStorageError,
 } from "./store/storageStatus";
+import { readChatState, writeChatState } from "./store/chatStorage";
 
 const STORAGE_KEY = "local_ai_chat_sessions_v2";
 const CORRUPT_BACKUP_KEY = `${STORAGE_KEY}_corrupt_backup`;
@@ -179,27 +180,12 @@ function backupRawStorage(raw) {
   }
 }
 
-function getInitialChatState() {
+function getInitialChatState(raw) {
   const fallbackSession = createNewSession();
   const fallback = {
     activeSessionId: fallbackSession.id,
     sessions: [fallbackSession],
   };
-
-  let raw;
-  try {
-    raw = localStorage.getItem(STORAGE_KEY);
-  } catch (error) {
-    console.error("localStorage is not accessible:", error);
-    return {
-      state: fallback,
-      notice: {
-        severity: "warning",
-        message: "无法访问浏览器存储，本次聊天记录不会被保存。",
-      },
-      persistBlocked: true,
-    };
-  }
 
   if (!raw) {
     return { state: fallback, notice: null, persistBlocked: false };
@@ -253,6 +239,47 @@ function getInitialChatState() {
   };
 }
 
+async function loadChatState() {
+  let legacyRaw = null;
+  try {
+    legacyRaw = localStorage.getItem(STORAGE_KEY);
+  } catch (error) {
+    console.warn("Could not access legacy chat storage:", error);
+  }
+
+  let stored;
+  try {
+    stored = await readChatState();
+  } catch (error) {
+    console.warn("Could not read chats from IndexedDB:", error);
+  }
+
+  // A localStorage copy can be a recovery copy left by a previous failed IDB write.
+  if (legacyRaw) {
+    const legacyState = getInitialChatState(legacyRaw);
+    if (legacyState.persistBlocked) return legacyState;
+    try {
+      await writeChatState(legacyState.state);
+      localStorage.removeItem(STORAGE_KEY);
+      return legacyState;
+    } catch (error) {
+      console.warn("Could not migrate chats to IndexedDB; retaining localStorage copy:", error);
+      return {
+        ...legacyState,
+        notice: {
+          severity: "warning",
+          message: "Chat storage could not be upgraded. Existing chats remain in browser storage.",
+        },
+      };
+    }
+  }
+
+  if (stored && Array.isArray(stored.sessions)) {
+    return getInitialChatState(JSON.stringify(stored));
+  }
+
+  return getInitialChatState(null);
+}
 function getInitialTheme() {
   try {
     const savedTheme = localStorage.getItem(THEME_KEY);
@@ -276,7 +303,8 @@ function getInitialSidebarCollapsed() {
 // ========================================
 
 function App() {
-  const [initialChat] = useState(getInitialChatState);
+  const [initialChat] = useState(() => getInitialChatState(null));
+  const [chatStorageReady, setChatStorageReady] = useState(false);
 
   const [theme, setTheme] = useState(getInitialTheme);
   const [sessions, setSessions] = useState(initialChat.state.sessions);
@@ -300,6 +328,21 @@ function App() {
   );
 
   const persistBlockedRef = useRef(initialChat.persistBlocked);
+  useEffect(() => {
+    let cancelled = false;
+    loadChatState().then((loaded) => {
+      if (cancelled) return;
+      setSessions(loaded.state.sessions);
+      setActiveSessionId(loaded.state.activeSessionId);
+      if (loaded.notice) setNotice(loaded.notice);
+      persistBlockedRef.current = loaded.persistBlocked;
+      setChatStorageReady(true);
+    }).catch((error) => {
+      console.warn("Could not initialize chat storage:", error);
+      if (!cancelled) setChatStorageReady(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
   const chatEndRef = useRef(null);
   const messagesAreaRef = useRef(null);
   const isNearBottomRef = useRef(true);
@@ -318,24 +361,20 @@ function App() {
   // Effects
   // =========================
 
-  // 流式生成期间不写入 localStorage，生成结束（loading 变为 false）后统一写入一次
+  // Persist chats after streaming settles; initialization prevents overwriting the loaded state.
   useEffect(() => {
-    if (loading || persistBlockedRef.current) return;
-
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ activeSessionId, sessions }),
-      );
-      setStorageError(null);
-    } catch (error) {
-      // QuotaExceededError 或隐私模式下的写入失败：只更新外部 store，不能让异常冒泡
-      console.error("Failed to persist chats:", error);
-      setStorageError(
-        "聊天记录无法保存到浏览器存储（可能已超出容量）。请导出或删除部分会话。",
-      );
-    }
-  }, [activeSessionId, sessions, loading]);
+    if (!chatStorageReady || loading || persistBlockedRef.current) return;
+    const state = { activeSessionId, sessions };
+    writeChatState(state).then(() => setStorageError(null)).catch((error) => {
+      console.warn("Failed to persist chats in IndexedDB:", error);
+      setStorageError("Chat records could not be saved to browser storage.");
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (fallbackError) {
+        console.warn("Could not save a localStorage recovery copy:", fallbackError);
+      }
+    });
+  }, [activeSessionId, sessions, loading, chatStorageReady]);
 
   useEffect(() => {
     try {
@@ -349,11 +388,10 @@ function App() {
     try {
       localStorage.setItem(SIDEBAR_KEY, String(sidebarCollapsed));
     } catch {
-      // 忽略写入错误（例如隐私模式禁止 localStorage）
+      // Ignore unavailable localStorage for this nonessential preference.
     }
   }, [sidebarCollapsed]);
 
-  // 获取模型列表：组件卸载或 StrictMode 重复挂载时取消旧请求
   useEffect(() => {
     const controller = new AbortController();
 
@@ -872,6 +910,10 @@ function App() {
   // =========================
   // UI
   // =========================
+
+  if (!chatStorageReady) {
+    return <main style={themeStyles.page} aria-live="polite">Loading chats…</main>;
+  }
 
   return (
     <main style={themeStyles.page}>
