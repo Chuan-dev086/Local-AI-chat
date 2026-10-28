@@ -243,7 +243,7 @@ app.post("/api/chat", async (req, res) => {
   const normalizedMode = mode === "code" ? "code" : "chat";
 
   // 用户传了 model 就用用户的；否则回退到该模式的默认模型
-  const selectedModel =
+  let selectedModel =
     typeof requestedModel === "string" && requestedModel.trim()
       ? requestedModel.trim()
       : DEFAULT_MODELS[normalizedMode];
@@ -276,7 +276,56 @@ app.post("/api/chat", async (req, res) => {
       : [];
     return images.length ? { role: item.role, content: item.content, images } : { role: item.role, content: item.content };
   });
+  const topLevelImages = Array.isArray(body.images)
+    ? body.images.filter((image) => typeof image === "string" && image.trim()).slice(0, 4)
+    : [];
+  if (topLevelImages.length) {
+    const lastUserIndex = recentMessages.findLastIndex((item) => item.role === "user");
+    if (lastUserIndex >= 0) {
+      const existing = recentMessages[lastUserIndex].images || [];
+      recentMessages[lastUserIndex] = {
+        ...recentMessages[lastUserIndex],
+        images: [...existing, ...topLevelImages].slice(0, 4),
+      };
+    }
+  }
   const ollamaMessages = [systemMessage, ...recentMessages];
+
+  // Route image requests away from known text-only models to an installed vision model.
+  const hasImageData = (value) => {
+    if (typeof value === "string") {
+      return /^(?:data:image\/[a-z0-9.+-]+;base64,)?[a-z0-9+/]{128,}={0,2}$/i.test(value.trim());
+    }
+    if (Array.isArray(value)) return value.some(hasImageData);
+    if (!value || typeof value !== "object") return false;
+    return Object.entries(value).some(([key, nested]) =>
+      /^(images?|image_url|image)$/i.test(key) && hasImageData(nested),
+    );
+  };
+  const containsImages = hasImageData(body.images) || hasImageData(messages);
+  const normalizedModelName = selectedModel.toLowerCase().split(":")[0];
+  const knownTextOnlyModel =
+    /^(llama3(?:\.\d+)?|qwen2\.5-coder|deepseek-coder|codellama|phi[234]?|gemma(?:2)?|mistral|mixtral)(?:$|-)/i.test(normalizedModelName);
+
+  if (containsImages && knownTextOnlyModel) {
+    try {
+      const response = await axios.get(`${OLLAMA_URL}/api/tags`, { timeout: 5000 });
+      const availableModels = (response.data?.models || [])
+        .map((item) => item?.name)
+        .filter((name) => typeof name === "string");
+      const preferred = ["qwen2.5vl:3b", "llava"];
+      selectedModel = preferred.find((candidate) =>
+        availableModels.some((name) =>
+          candidate === "llava"
+            ? name.toLowerCase() === "llava" || name.toLowerCase().startsWith("llava:")
+            : name.toLowerCase() === candidate,
+        ),
+      ) || preferred[0];
+    } catch (error) {
+      console.warn(`[Chat] Could not list vision models; trying qwen2.5vl:3b: ${error.message}`);
+      selectedModel = "qwen2.5vl:3b";
+    }
+  }
 
   const startTime = Date.now();
 
