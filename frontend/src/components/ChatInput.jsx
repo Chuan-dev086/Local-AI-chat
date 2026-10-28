@@ -50,6 +50,17 @@ function ChatInput({
     const file = e.target.files[0];
     if (!file) return;
 
+    if (/^image\/(png|jpeg)$/.test(file.type) || /\.(png|jpe?g)$/i.test(file.name)) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = String(event.target.result || "");
+        onAttachFile({ name: file.name, imageBase64: dataUrl.split(",")[1], mimeType: file.type || "image/jpeg" });
+      };
+      reader.readAsDataURL(file);
+      e.target.value = null;
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (event) => {
       let content = event.target.result;
@@ -109,9 +120,24 @@ function ChatInput({
   };
 
   return (
-    <div style={styles.wrapper}>
+    <div style={styles.wrapper}
+      onDragOver={(event) => { if (Array.from(event.dataTransfer.types).includes("Files")) event.preventDefault(); }}
+      onDrop={(event) => {
+        const file = event.dataTransfer.files?.[0];
+        if (file && (/^image\/(png|jpeg)$/.test(file.type) || /\.(png|jpe?g)$/i.test(file.name))) {
+          event.preventDefault();
+          handleFileChange({ target: { files: [file], value: null } });
+        }
+      }}>
       {/* 显示已附加的文件标签 */}
-      {attachedFile && (
+      {attachedFile && (attachedFile.imageBase64 ? (
+        <Box sx={{ width: "100%", mb: 1, display: "flex", justifyContent: "flex-start" }}>
+          <Box sx={{ position: "relative", width: 76, height: 64, borderRadius: 2, overflow: "hidden", border: "1px solid", borderColor: theme === "dark" ? "#475569" : "#cbd5e1", boxShadow: 1 }}>
+            <Box component="img" src={`data:${attachedFile.mimeType || "image/jpeg"};base64,${attachedFile.imageBase64}`} alt={attachedFile.name} sx={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <IconButton aria-label="Remove image" onClick={onRemoveFile} size="small" sx={{ position: "absolute", top: 2, right: 2, p: 0.25, bgcolor: "rgba(15,23,42,.75)", color: "white", "&:hover": { bgcolor: "rgba(15,23,42,.95)" } }}><Close sx={{ fontSize: 15 }} /></IconButton>
+          </Box>
+        </Box>
+      ) : (
         <Box
           sx={{
             width: "100%",
@@ -134,13 +160,13 @@ function ChatInput({
             }}
           />
         </Box>
-      )}
+      ))}
 
       <Box sx={styles.pillContainer}>
         {/* 隐藏的文件选择器 */}
         <input
           type="file"
-          accept=".txt,.md,.js,.jsx,.ts,.tsx,.py,.json,.html,.css,.csv"
+          accept=".txt,.md,.js,.jsx,.ts,.tsx,.py,.json,.html,.css,.csv,.png,.jpg,.jpeg,image/png,image/jpeg"
           style={{ display: "none" }}
           ref={fileInputRef}
           onChange={handleFileChange}

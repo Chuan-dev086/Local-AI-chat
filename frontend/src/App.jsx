@@ -90,6 +90,9 @@ function getTitleFromMessage(message) {
 // 将 API 消息转换为发给后端的内容：有附件时把文件内容拼入当前问题
 // 注意：每一轮都会重新携带附件内容，保证追问时模型仍能看到文件
 function toApiMessage(message) {
+  if (message.role === "user" && message.imageBase64) {
+    return { role: "user", content: message.content, images: [message.imageBase64] };
+  }
   if (message.role !== "user" || !message.file || !message.fileContent) {
     return { role: message.role, content: message.content };
   }
@@ -137,6 +140,8 @@ function normalizeMessage(raw) {
     file: typeof raw.file === "string" ? raw.file : undefined,
     fileContent:
       typeof raw.fileContent === "string" ? raw.fileContent : undefined,
+    imageBase64: typeof raw.imageBase64 === "string" ? raw.imageBase64 : undefined,
+    mimeType: typeof raw.mimeType === "string" ? raw.mimeType : undefined,
     createdAt: typeof raw.createdAt === "string" ? raw.createdAt : undefined,
   };
 }
@@ -733,6 +738,8 @@ function App() {
       content: userText || DEFAULT_FILE_PROMPT,
       file: attachedFile?.name,
       fileContent: attachedFile?.content,
+      imageBase64: attachedFile?.imageBase64,
+      mimeType: attachedFile?.mimeType,
       createdAt: nowIso(),
     };
 
@@ -799,6 +806,8 @@ function App() {
       content: editedText,
       file: original.file,
       fileContent: original.fileContent,
+      imageBase64: original.imageBase64,
+      mimeType: original.mimeType,
       createdAt: nowIso(),
     };
 

@@ -143,7 +143,12 @@ function Sidebar({
                       size="small"
                       variant="standard"
                       inputProps={{ "aria-label": `Rename ${session.title}` }}
-                      sx={{ flex: 1, minWidth: 0, "& input": { py: 0.25, fontSize: 14 } }}
+                      sx={{
+                        flex: 1, minWidth: 0,
+                        "& .MuiInput-root": { height: 24, color: colors.text },
+                        "& .MuiInput-input": { boxSizing: "border-box", height: 24, py: 0, px: 0, fontSize: 14, fontWeight: isActive ? 700 : 500 },
+                        "& .MuiInput-root:before, & .MuiInput-root:after": { display: "none" },
+                      }}
                     />
                   ) : (
                     <span
