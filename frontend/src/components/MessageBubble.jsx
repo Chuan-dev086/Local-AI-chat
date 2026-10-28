@@ -152,8 +152,17 @@ function MessageBubble({
             </div>
           ) : isUser ? (
             <div style={styles.userText}>
+              {message.imageBase64 && (
+                <div style={{ marginBottom: 8 }}>
+                  <img
+                    src={`data:${message.mimeType || "image/jpeg"};base64,${message.imageBase64}`}
+                    alt={message.file || "Uploaded image"}
+                    style={{ display: "block", maxWidth: "min(320px, 100%)", maxHeight: 240, borderRadius: 10, objectFit: "contain" }}
+                  />
+                </div>
+              )}
               {message.content}
-              {message.file && (
+              {message.file && !message.imageBase64 && (
                 <div style={{ marginTop: 8, opacity: 0.8, fontSize: 13 }}>
                   📎 附件: {message.file}
                 </div>

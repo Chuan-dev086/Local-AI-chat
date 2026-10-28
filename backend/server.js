@@ -70,7 +70,7 @@ app.use(
   }),
 );
 
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "20mb" }));
 
 // ========================================
 // Terminal Colors & Log Helpers
@@ -270,7 +270,12 @@ app.post("/api/chat", async (req, res) => {
       item.content.trim() !== "",
   );
 
-  const recentMessages = validMessages.slice(-MAX_CONTEXT_MESSAGES);
+  const recentMessages = validMessages.slice(-MAX_CONTEXT_MESSAGES).map((item) => {
+    const images = Array.isArray(item.images)
+      ? item.images.filter((image) => typeof image === "string" && image.trim()).slice(0, 4)
+      : [];
+    return images.length ? { role: item.role, content: item.content, images } : { role: item.role, content: item.content };
+  });
   const ollamaMessages = [systemMessage, ...recentMessages];
 
   const startTime = Date.now();
