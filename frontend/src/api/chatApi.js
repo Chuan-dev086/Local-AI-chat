@@ -4,6 +4,7 @@
 const API_BASE =
   import.meta.env.VITE_API_BASE?.trim() || "http://localhost:5000/api";
 const CHAT_URL = `${API_BASE}/chat`;
+const CLEAR_CHAT_URL = `${CHAT_URL}/clear`;
 const MODELS_URL = `${API_BASE}/models`;
 const MODELS_TIMEOUT_MS = 5000;
 
@@ -21,6 +22,29 @@ export class ChatApiError extends Error {
 
 export function isAbortError(error) {
   return error?.name === "AbortError";
+}
+
+export async function clearChat(sessionId) {
+  let response;
+  try {
+    response = await fetch(CLEAR_CHAT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId }),
+    });
+  } catch (error) {
+    throw new ChatApiError("Unable to connect to the backend. Please make sure it is running.", {
+      cause: error,
+    });
+  }
+
+  if (!response.ok) {
+    throw new ChatApiError(await readErrorMessage(response), {
+      status: response.status,
+    });
+  }
+
+  return response.json();
 }
 
 // 读取 HTTP 错误响应中的错误信息，解析失败时使用通用提示

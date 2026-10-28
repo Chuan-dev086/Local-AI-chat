@@ -202,6 +202,17 @@ app.get("/api/models", async (req, res) => {
 // Chat API
 // ========================================
 
+app.post("/api/chat/clear", (req, res) => {
+  const { sessionId } = req.body ?? {};
+
+  if (typeof sessionId !== "string" || !sessionId.trim()) {
+    return res.status(400).json({ error: "sessionId is required." });
+  }
+
+  // Chat history is stored by the frontend; acknowledge clearing this session.
+  return res.json({ sessionId, cleared: true });
+});
+
 app.post("/api/chat", async (req, res) => {
   const body = req.body ?? {};
   const {
