@@ -81,11 +81,8 @@ function createNewSession(mode = "chat") {
 }
 
 function getTitleFromMessage(message) {
-  const cleanMessage = message.replace(/\s+/g, " ").trim();
-  if (!cleanMessage) return "New Chat";
-  const maxLength = 36;
-  if (cleanMessage.length <= maxLength) return cleanMessage;
-  return `${cleanMessage.slice(0, maxLength)}...`;
+  const title = message.slice(0, 12).trim();
+  return title || "New Chat";
 }
 
 // 将 API 消息转换为发给后端的内容：有附件时把文件内容拼入当前问题
@@ -510,6 +507,15 @@ function App() {
     updateActiveSession((session) => ({
       ...session,
       systemPrompt: text,
+      updatedAt: nowIso(),
+    }));
+  };
+
+  const handleSelectPromptTemplate = (prompt) => {
+    if (loading || !activeSession) return;
+    updateActiveSession((session) => ({
+      ...session,
+      systemPrompt: prompt,
       updatedAt: nowIso(),
     }));
   };
@@ -952,6 +958,7 @@ function App() {
                 onInputChange={setInput}
                 onSendMessage={handleSendMessage}
                 onStop={handleStop}
+                onSelectPromptTemplate={handleSelectPromptTemplate}
               />
             </div>
           </div>

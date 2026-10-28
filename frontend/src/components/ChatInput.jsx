@@ -1,7 +1,29 @@
-import { Box, IconButton, TextField, Chip } from "@mui/material";
-import { ArrowUpward, Stop, AttachFile, Close } from "@mui/icons-material";
+import { Box, IconButton, TextField, Chip, Menu, MenuItem } from "@mui/material";
+import { ArrowUpward, Stop, AttachFile, Close, AutoAwesome } from "@mui/icons-material";
 import { useState, useRef } from "react";
 import { getChatInputStyles } from "../theme/theme";
+
+const PROMPT_TEMPLATES = [
+  {
+    name: "Default assistant",
+    prompt: "",
+  },
+  {
+    name: "Python expert",
+    prompt:
+      "You are an expert Python developer. Give accurate, idiomatic Python guidance, explain important tradeoffs, and include runnable examples when useful.",
+  },
+  {
+    name: "Socratic tutor",
+    prompt:
+      "You are a patient Socratic tutor. Help the user learn by asking focused questions and offering hints before giving a full solution. Adapt to their level.",
+  },
+  {
+    name: "Writing assistant",
+    prompt:
+      "You are a thoughtful writing assistant. Help the user improve clarity, structure, and tone while preserving their meaning and voice.",
+  },
+];
 
 function ChatInput({
   input,
@@ -15,10 +37,12 @@ function ChatInput({
   onKeyDown,
   onSendMessage,
   onStop,
+  onSelectPromptTemplate,
 }) {
   const isInputEmpty = !input.trim() && !attachedFile;
   const styles = getChatInputStyles(theme, loading, isInputEmpty);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [promptMenuAnchor, setPromptMenuAnchor] = useState(null);
   const fileInputRef = useRef(null);
 
   // 读取本地文件
@@ -130,6 +154,33 @@ function ChatInput({
         >
           <AttachFile fontSize="small" />
         </IconButton>
+
+        <IconButton
+          aria-label="Choose a prompt template"
+          title="Prompt templates"
+          onClick={(event) => setPromptMenuAnchor(event.currentTarget)}
+          disabled={loading}
+          sx={{ mb: 0.5, color: "text.secondary" }}
+        >
+          <AutoAwesome fontSize="small" />
+        </IconButton>
+        <Menu
+          anchorEl={promptMenuAnchor}
+          open={Boolean(promptMenuAnchor)}
+          onClose={() => setPromptMenuAnchor(null)}
+        >
+          {PROMPT_TEMPLATES.map((template) => (
+            <MenuItem
+              key={template.name}
+              onClick={() => {
+                onSelectPromptTemplate?.(template.prompt);
+                setPromptMenuAnchor(null);
+              }}
+            >
+              {template.name}
+            </MenuItem>
+          ))}
+        </Menu>
 
         <TextField
           value={input}
