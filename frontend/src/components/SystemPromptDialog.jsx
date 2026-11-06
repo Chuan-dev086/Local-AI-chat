@@ -11,6 +11,7 @@ import {
   DialogTitle,
   TextField,
   ThemeProvider,
+  Box,
 } from "@mui/material";
 
 const MAX_LENGTH = 4000;
@@ -22,8 +23,11 @@ function SystemPromptDialog({
   theme,
   onClose,
   onSave,
+  onSaveAsTemplate,
 }) {
   const [value, setValue] = useState(initialValue || "");
+  const [templateName, setTemplateName] = useState("");
+  const [isNaming, setIsNaming] = useState(false);
 
   const muiTheme = useMemo(
     () =>
@@ -45,11 +49,47 @@ function SystemPromptDialog({
     setValue("");
   };
 
+  const handleTriggerSaveAsTemplate = () => {
+    if (!value.trim()) return;
+    if (!isNaming) {
+      const defaultName =
+        value.trim().slice(0, 12) + (value.trim().length > 12 ? "..." : "");
+      setTemplateName(defaultName);
+      setIsNaming(true);
+      return;
+    }
+
+    if (templateName.trim()) {
+      // 调用 addPrompt 并接收返回结果
+      const result = onSaveAsTemplate?.(templateName.trim(), value.trim());
+
+      if (result && result.success === false) {
+        if (result.reason === "duplicate") {
+          window.alert("保存失败：已存在相同名称或相同内容的模板！");
+        }
+        return;
+      }
+
+      // 成功后重置状态并关闭命名区
+      setIsNaming(false);
+      setTemplateName("");
+      window.alert("模板保存成功！");
+    }
+  };
+
   const isOverLimit = value.length > MAX_LENGTH;
 
   return (
     <ThemeProvider theme={muiTheme}>
-      <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
+      <Dialog
+        open={open}
+        onClose={() => {
+          setIsNaming(false);
+          onClose();
+        }}
+        fullWidth
+        maxWidth="md"
+      >
         <DialogTitle>System Prompt</DialogTitle>
 
         <DialogContent>
@@ -65,15 +105,43 @@ function SystemPromptDialog({
           <TextField
             autoFocus
             multiline
-            minRows={10}
-            maxRows={20}
+            minRows={8}
+            maxRows={16}
             fullWidth
             value={value}
             onChange={(event) => setValue(event.target.value)}
-            placeholder="e.g., You are a patient programming mentor. When answering questions, explain the concepts first, then provide examples..."
+            placeholder="e.g., You are a patient programming mentor..."
             error={isOverLimit}
             helperText={`${value.length} / ${MAX_LENGTH}`}
           />
+
+          {isNaming && (
+            <Box sx={{ mt: 2, display: "flex", gap: 1, alignItems: "center" }}>
+              <TextField
+                label="Template Name"
+                size="small"
+                fullWidth
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                placeholder="Give this template a name..."
+              />
+              <Button
+                variant="contained"
+                size="small"
+                onClick={handleTriggerSaveAsTemplate}
+                disabled={!templateName.trim()}
+              >
+                Confirm
+              </Button>
+              <Button
+                size="small"
+                color="inherit"
+                onClick={() => setIsNaming(false)}
+              >
+                Cancel
+              </Button>
+            </Box>
+          )}
         </DialogContent>
 
         <DialogActions>
@@ -81,7 +149,23 @@ function SystemPromptDialog({
             Clear
           </Button>
 
-          <Button onClick={onClose} color="inherit">
+          {!isNaming && (
+            <Button
+              onClick={handleTriggerSaveAsTemplate}
+              color="primary"
+              disabled={!value.trim()}
+            >
+              ⭐ Save as Template
+            </Button>
+          )}
+
+          <Button
+            onClick={() => {
+              setIsNaming(false);
+              onClose();
+            }}
+            color="inherit"
+          >
             Cancel
           </Button>
 

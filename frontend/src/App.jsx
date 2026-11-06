@@ -1092,6 +1092,7 @@ function App() {
           theme={theme}
           onClose={handleCloseSystemPrompt}
           onSave={handleSaveSystemPrompt}
+          onSaveAsTemplate={addPrompt}
         />
 
         <RenameDialog
