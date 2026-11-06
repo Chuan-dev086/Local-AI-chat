@@ -1,9 +1,25 @@
-import { Box, IconButton, TextField, Chip, Menu, MenuItem } from "@mui/material";
-import { ArrowUpward, Stop, AttachFile, Close, AutoAwesome } from "@mui/icons-material";
+// src/components/ChatInput.jsx
+import {
+  Box,
+  IconButton,
+  TextField,
+  Chip,
+  Menu,
+  MenuItem,
+  Divider,
+} from "@mui/material";
+import {
+  ArrowUpward,
+  Stop,
+  AttachFile,
+  Close,
+  AutoAwesome,
+  Settings,
+} from "@mui/icons-material";
 import { useState, useRef } from "react";
 import { getChatInputStyles } from "../theme/theme";
 
-const PROMPT_TEMPLATES = [
+const BUILTIN_PROMPT_TEMPLATES = [
   {
     name: "Default assistant",
     prompt: "",
@@ -31,6 +47,7 @@ function ChatInput({
   activeSession,
   theme,
   attachedFile,
+  customPrompts = [],
   onAttachFile,
   onRemoveFile,
   onInputChange,
@@ -38,6 +55,7 @@ function ChatInput({
   onSendMessage,
   onStop,
   onSelectPromptTemplate,
+  onOpenPromptManager,
 }) {
   const isInputEmpty = !input.trim() && !attachedFile;
   const styles = getChatInputStyles(theme, loading, isInputEmpty);
@@ -45,16 +63,22 @@ function ChatInput({
   const [promptMenuAnchor, setPromptMenuAnchor] = useState(null);
   const fileInputRef = useRef(null);
 
-  // 读取本地文件
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (/^image\/(png|jpeg)$/.test(file.type) || /\.(png|jpe?g)$/i.test(file.name)) {
+    if (
+      /^image\/(png|jpeg)$/.test(file.type) ||
+      /\.(png|jpe?g)$/i.test(file.name)
+    ) {
       const reader = new FileReader();
       reader.onload = (event) => {
         const dataUrl = String(event.target.result || "");
-        onAttachFile({ name: file.name, imageBase64: dataUrl.split(",")[1], mimeType: file.type || "image/jpeg" });
+        onAttachFile({
+          name: file.name,
+          imageBase64: dataUrl.split(",")[1],
+          mimeType: file.type || "image/jpeg",
+        });
       };
       reader.readAsDataURL(file);
       e.target.value = null;
@@ -64,7 +88,6 @@ function ChatInput({
     const reader = new FileReader();
     reader.onload = (event) => {
       let content = event.target.result;
-      // 限制最大 8000 字符，防止超出模型上下文导致崩溃
       const MAX_CHARS = 8000;
       let isTruncated = false;
       if (content.length > MAX_CHARS) {
@@ -74,7 +97,7 @@ function ChatInput({
       onAttachFile({ name: file.name, content, isTruncated });
     };
     reader.readAsText(file);
-    e.target.value = null; // 允许重复上传同名文件
+    e.target.value = null;
   };
 
   const handleKeyDown = (event) => {
@@ -83,7 +106,6 @@ function ChatInput({
         .filter((m) => m.role === "user")
         .map((m) => m.content) || [];
 
-    // 上箭头：翻阅历史
     if (event.key === "ArrowUp" && userMessages.length > 0) {
       if (historyIndex === -1 && input === "") {
         event.preventDefault();
@@ -96,7 +118,6 @@ function ChatInput({
       }
       return;
     }
-    // 下箭头：往回翻
     if (event.key === "ArrowDown" && historyIndex !== -1) {
       event.preventDefault();
       if (historyIndex < userMessages.length - 1) {
@@ -108,7 +129,6 @@ function ChatInput({
       }
       return;
     }
-    // 回车发送
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       if (!loading && !isInputEmpty) {
@@ -120,50 +140,97 @@ function ChatInput({
   };
 
   return (
-    <div style={styles.wrapper}
-      onDragOver={(event) => { if (Array.from(event.dataTransfer.types).includes("Files")) event.preventDefault(); }}
+    <div
+      style={styles.wrapper}
+      onDragOver={(event) => {
+        if (Array.from(event.dataTransfer.types).includes("Files"))
+          event.preventDefault();
+      }}
       onDrop={(event) => {
         const file = event.dataTransfer.files?.[0];
-        if (file && (/^image\/(png|jpeg)$/.test(file.type) || /\.(png|jpe?g)$/i.test(file.name))) {
+        if (
+          file &&
+          (/^image\/(png|jpeg)$/.test(file.type) ||
+            /\.(png|jpe?g)$/i.test(file.name))
+        ) {
           event.preventDefault();
           handleFileChange({ target: { files: [file], value: null } });
         }
-      }}>
-      {/* 显示已附加的文件标签 */}
-      {attachedFile && (attachedFile.imageBase64 ? (
-        <Box sx={{ width: "100%", mb: 1, display: "flex", justifyContent: "flex-start" }}>
-          <Box sx={{ position: "relative", width: 76, height: 64, borderRadius: 2, overflow: "hidden", border: "1px solid", borderColor: theme === "dark" ? "#475569" : "#cbd5e1", boxShadow: 1 }}>
-            <Box component="img" src={`data:${attachedFile.mimeType || "image/jpeg"};base64,${attachedFile.imageBase64}`} alt={attachedFile.name} sx={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            <IconButton aria-label="Remove image" onClick={onRemoveFile} size="small" sx={{ position: "absolute", top: 2, right: 2, p: 0.25, bgcolor: "rgba(15,23,42,.75)", color: "white", "&:hover": { bgcolor: "rgba(15,23,42,.95)" } }}><Close sx={{ fontSize: 15 }} /></IconButton>
-          </Box>
-        </Box>
-      ) : (
-        <Box
-          sx={{
-            width: "100%",
-            mb: 1,
-            display: "flex",
-            justifyContent: "flex-start",
-          }}
-        >
-          <Chip
-            icon={<AttachFile fontSize="small" />}
-            label={
-              attachedFile.name + (attachedFile.isTruncated ? " (已截断)" : "")
-            }
-            onDelete={onRemoveFile}
-            deleteIcon={<Close />}
-            size="small"
+      }}
+    >
+      {attachedFile &&
+        (attachedFile.imageBase64 ? (
+          <Box
             sx={{
-              backgroundColor: theme === "dark" ? "#334155" : "#e2e8f0",
-              color: theme === "dark" ? "#e2e8f0" : "#0f172a",
+              width: "100%",
+              mb: 1,
+              display: "flex",
+              justifyContent: "flex-start",
             }}
-          />
-        </Box>
-      ))}
+          >
+            <Box
+              sx={{
+                position: "relative",
+                width: 76,
+                height: 64,
+                borderRadius: 2,
+                overflow: "hidden",
+                border: "1px solid",
+                borderColor: theme === "dark" ? "#475569" : "#cbd5e1",
+                boxShadow: 1,
+              }}
+            >
+              <Box
+                component="img"
+                src={`data:${attachedFile.mimeType || "image/jpeg"};base64,${attachedFile.imageBase64}`}
+                alt={attachedFile.name}
+                sx={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
+              <IconButton
+                aria-label="Remove image"
+                onClick={onRemoveFile}
+                size="small"
+                sx={{
+                  position: "absolute",
+                  top: 2,
+                  right: 2,
+                  p: 0.25,
+                  bgcolor: "rgba(15,23,42,.75)",
+                  color: "white",
+                  "&:hover": { bgcolor: "rgba(15,23,42,.95)" },
+                }}
+              >
+                <Close sx={{ fontSize: 15 }} />
+              </IconButton>
+            </Box>
+          </Box>
+        ) : (
+          <Box
+            sx={{
+              width: "100%",
+              mb: 1,
+              display: "flex",
+              justifyContent: "flex-start",
+            }}
+          >
+            <Chip
+              icon={<AttachFile fontSize="small" />}
+              label={
+                attachedFile.name +
+                (attachedFile.isTruncated ? " (已截断)" : "")
+              }
+              onDelete={onRemoveFile}
+              deleteIcon={<Close />}
+              size="small"
+              sx={{
+                backgroundColor: theme === "dark" ? "#334155" : "#e2e8f0",
+                color: theme === "dark" ? "#e2e8f0" : "#0f172a",
+              }}
+            />
+          </Box>
+        ))}
 
       <Box sx={styles.pillContainer}>
-        {/* 隐藏的文件选择器 */}
         <input
           type="file"
           accept=".txt,.md,.js,.jsx,.ts,.tsx,.py,.json,.html,.css,.csv,.png,.jpg,.jpeg,image/png,image/jpeg"
@@ -172,7 +239,6 @@ function ChatInput({
           onChange={handleFileChange}
         />
 
-        {/* 回形针按钮 */}
         <IconButton
           onClick={() => fileInputRef.current?.click()}
           disabled={loading}
@@ -210,21 +276,16 @@ function ChatInput({
           slotProps={{
             paper: {
               sx: {
+                maxHeight: 300, // 👈 解决长列表滚动问题
                 bgcolor: theme === "dark" ? "#1e293b" : "background.paper",
                 color: theme === "dark" ? "#e2e8f0" : "text.primary",
               },
             },
           }}
         >
-          {PROMPT_TEMPLATES.map((template) => (
+          {BUILTIN_PROMPT_TEMPLATES.map((template) => (
             <MenuItem
               key={template.name}
-              sx={{
-                color: theme === "dark" ? "#e2e8f0" : "text.primary",
-                "&:hover": {
-                  bgcolor: theme === "dark" ? "#334155" : "action.hover",
-                },
-              }}
               onClick={() => {
                 onSelectPromptTemplate?.(template.prompt);
                 setPromptMenuAnchor(null);
@@ -233,6 +294,31 @@ function ChatInput({
               {template.name}
             </MenuItem>
           ))}
+
+          {customPrompts.length > 0 && <Divider sx={{ my: 1 }} />}
+
+          {customPrompts.map((template) => (
+            <MenuItem
+              key={template.id}
+              onClick={() => {
+                onSelectPromptTemplate?.(template.prompt);
+                setPromptMenuAnchor(null);
+              }}
+            >
+              ⭐ {template.name}
+            </MenuItem>
+          ))}
+
+          <Divider sx={{ my: 1 }} />
+          <MenuItem
+            onClick={() => {
+              setPromptMenuAnchor(null);
+              onOpenPromptManager?.();
+            }}
+          >
+            <Settings fontSize="small" style={{ marginRight: 8 }} /> Manage
+            Custom Prompts...
+          </MenuItem>
         </Menu>
 
         <TextField

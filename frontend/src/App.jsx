@@ -8,6 +8,8 @@ import {
   useSyncExternalStore,
 } from "react";
 import { Alert } from "@mui/material";
+import { useCustomPrompts } from "./hooks/useCustomPrompts";
+import PromptManagerDialog from "./components/PromptManagerDialog";
 
 import Sidebar from "./components/Sidebar";
 import ChatHeader from "./components/ChatHeader";
@@ -91,7 +93,11 @@ function getTitleFromMessage(message) {
 // 注意：每一轮都会重新携带附件内容，保证追问时模型仍能看到文件
 function toApiMessage(message) {
   if (message.role === "user" && message.imageBase64) {
-    return { role: "user", content: message.content, images: [message.imageBase64] };
+    return {
+      role: "user",
+      content: message.content,
+      images: [message.imageBase64],
+    };
   }
   if (message.role !== "user" || !message.file || !message.fileContent) {
     return { role: message.role, content: message.content };
@@ -140,7 +146,8 @@ function normalizeMessage(raw) {
     file: typeof raw.file === "string" ? raw.file : undefined,
     fileContent:
       typeof raw.fileContent === "string" ? raw.fileContent : undefined,
-    imageBase64: typeof raw.imageBase64 === "string" ? raw.imageBase64 : undefined,
+    imageBase64:
+      typeof raw.imageBase64 === "string" ? raw.imageBase64 : undefined,
     mimeType: typeof raw.mimeType === "string" ? raw.mimeType : undefined,
     createdAt: typeof raw.createdAt === "string" ? raw.createdAt : undefined,
   };
@@ -268,12 +275,16 @@ async function loadChatState() {
       localStorage.removeItem(STORAGE_KEY);
       return legacyState;
     } catch (error) {
-      console.warn("Could not migrate chats to IndexedDB; retaining localStorage copy:", error);
+      console.warn(
+        "Could not migrate chats to IndexedDB; retaining localStorage copy:",
+        error,
+      );
       return {
         ...legacyState,
         notice: {
           severity: "warning",
-          message: "Chat storage could not be upgraded. Existing chats remain in browser storage.",
+          message:
+            "Chat storage could not be upgraded. Existing chats remain in browser storage.",
         },
       };
     }
@@ -331,22 +342,33 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     getInitialSidebarCollapsed,
   );
+  const {
+    prompts: customPrompts,
+    addPrompt,
+    updatePrompt,
+    deletePrompt,
+  } = useCustomPrompts();
+  const [isPromptManagerOpen, setIsPromptManagerOpen] = useState(false);
 
   const persistBlockedRef = useRef(initialChat.persistBlocked);
   useEffect(() => {
     let cancelled = false;
-    loadChatState().then((loaded) => {
-      if (cancelled) return;
-      setSessions(loaded.state.sessions);
-      setActiveSessionId(loaded.state.activeSessionId);
-      if (loaded.notice) setNotice(loaded.notice);
-      persistBlockedRef.current = loaded.persistBlocked;
-      setChatStorageReady(true);
-    }).catch((error) => {
-      console.warn("Could not initialize chat storage:", error);
-      if (!cancelled) setChatStorageReady(true);
-    });
-    return () => { cancelled = true; };
+    loadChatState()
+      .then((loaded) => {
+        if (cancelled) return;
+        setSessions(loaded.state.sessions);
+        setActiveSessionId(loaded.state.activeSessionId);
+        if (loaded.notice) setNotice(loaded.notice);
+        persistBlockedRef.current = loaded.persistBlocked;
+        setChatStorageReady(true);
+      })
+      .catch((error) => {
+        console.warn("Could not initialize chat storage:", error);
+        if (!cancelled) setChatStorageReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
   const chatEndRef = useRef(null);
   const messagesAreaRef = useRef(null);
@@ -370,15 +392,20 @@ function App() {
   useEffect(() => {
     if (!chatStorageReady || loading || persistBlockedRef.current) return;
     const state = { activeSessionId, sessions };
-    writeChatState(state).then(() => setStorageError(null)).catch((error) => {
-      console.warn("Failed to persist chats in IndexedDB:", error);
-      setStorageError("Chat records could not be saved to browser storage.");
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      } catch (fallbackError) {
-        console.warn("Could not save a localStorage recovery copy:", fallbackError);
-      }
-    });
+    writeChatState(state)
+      .then(() => setStorageError(null))
+      .catch((error) => {
+        console.warn("Failed to persist chats in IndexedDB:", error);
+        setStorageError("Chat records could not be saved to browser storage.");
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (fallbackError) {
+          console.warn(
+            "Could not save a localStorage recovery copy:",
+            fallbackError,
+          );
+        }
+      });
   }, [activeSessionId, sessions, loading, chatStorageReady]);
 
   useEffect(() => {
@@ -527,7 +554,8 @@ function App() {
   };
 
   const handleClearChat = async () => {
-    if (loading || !activeSession || activeSession.messages.length === 0) return;
+    if (loading || !activeSession || activeSession.messages.length === 0)
+      return;
     if (!window.confirm("Clear all messages in this chat?")) return;
 
     const sessionId = activeSession.id;
@@ -544,7 +572,8 @@ function App() {
     } catch (error) {
       setNotice({
         severity: "error",
-        message: error instanceof Error ? error.message : "Failed to clear chat.",
+        message:
+          error instanceof Error ? error.message : "Failed to clear chat.",
       });
     }
   };
@@ -930,7 +959,11 @@ function App() {
   // =========================
 
   if (!chatStorageReady) {
-    return <main style={themeStyles.page} aria-live="polite">Loading chats…</main>;
+    return (
+      <main style={themeStyles.page} aria-live="polite">
+        Loading chats…
+      </main>
+    );
   }
 
   return (
@@ -1038,12 +1071,14 @@ function App() {
                 activeSession={activeSession}
                 theme={theme}
                 attachedFile={attachedFile}
+                customPrompts={customPrompts} // 👈 传自定义模板列表
                 onAttachFile={setAttachedFile}
                 onRemoveFile={() => setAttachedFile(null)}
                 onInputChange={setInput}
                 onSendMessage={handleSendMessage}
                 onStop={handleStop}
                 onSelectPromptTemplate={handleSelectPromptTemplate}
+                onOpenPromptManager={() => setIsPromptManagerOpen(true)} // 👈 触发打开弹窗
               />
             </div>
           </div>
@@ -1066,6 +1101,16 @@ function App() {
           theme={theme}
           onClose={() => setIsRenameOpen(false)}
           onSave={handleSaveRename}
+        />
+
+        <PromptManagerDialog
+          open={isPromptManagerOpen}
+          theme={theme}
+          customPrompts={customPrompts}
+          onAdd={addPrompt}
+          onUpdate={updatePrompt}
+          onDelete={deletePrompt}
+          onClose={() => setIsPromptManagerOpen(false)}
         />
       </section>
     </main>
