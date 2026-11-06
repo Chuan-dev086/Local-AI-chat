@@ -3,6 +3,9 @@ import cors from "cors";
 import axios from "axios";
 import "dotenv/config";
 import { StringDecoder } from "string_decoder";
+import { connectDB } from "./db.js";
+import { Session } from "./models/Session.js";
+import { Message } from "./models/Message.js";
 
 const app = express();
 
@@ -199,6 +202,69 @@ app.get("/api/models", async (req, res) => {
 });
 
 // ========================================
+// Session Management APIs (新增部分)
+// ========================================
+// ========================================
+// Get all sessions with their messages (Using MongoDB $lookup)
+// ========================================
+app.get("/api/sessions", async (req, res) => {
+  try {
+    // Perform aggregate $lookup to embed messages into each session object
+    const sessions = await Session.aggregate([
+      { $sort: { updatedAt: -1 } },
+      {
+        $lookup: {
+          from: "messages", // The target MongoDB collection name (lowercase plural of model)
+          localField: "id", // Session schema field (custom string id)
+          foreignField: "sessionId", // Message schema field referencing the session
+          as: "messages", // The resulting array field injected into each session
+        },
+      },
+      // Ensure messages inside each session are sorted chronologically by creation time
+      {
+        $addFields: {
+          messages: {
+            $sortArray: { input: "$messages", sortBy: { createdAt: 1 } },
+          },
+        },
+      },
+    ]);
+
+    res.json({ sessions });
+  } catch (error) {
+    console.error(
+      "[Sessions] Failed to fetch sessions with messages via aggregation:",
+      error.message,
+    );
+    res.status(500).json({ error: "Failed to fetch chat sessions." });
+  }
+});
+
+app.post("/api/sessions", async (req, res) => {
+  try {
+    const { id, title, mode, model, systemPrompt, messages } = req.body;
+    if (!id || !model) {
+      return res
+        .status(400)
+        .json({ error: "Session id and model are required." });
+    }
+    const newSession = new Session({
+      id,
+      title: title || "New Chat",
+      mode: mode || "chat",
+      model,
+      systemPrompt: systemPrompt || "",
+      messages: messages || [],
+    });
+    await newSession.save();
+    res.status(201).json(newSession);
+  } catch (error) {
+    console.error("[Sessions] Failed to create session:", error.message);
+    res.status(500).json({ error: "Failed to create chat session." });
+  }
+});
+
+// ========================================
 // Chat API
 // ========================================
 
@@ -270,17 +336,27 @@ app.post("/api/chat", async (req, res) => {
       item.content.trim() !== "",
   );
 
-  const recentMessages = validMessages.slice(-MAX_CONTEXT_MESSAGES).map((item) => {
-    const images = Array.isArray(item.images)
-      ? item.images.filter((image) => typeof image === "string" && image.trim()).slice(0, 4)
-      : [];
-    return images.length ? { role: item.role, content: item.content, images } : { role: item.role, content: item.content };
-  });
+  const recentMessages = validMessages
+    .slice(-MAX_CONTEXT_MESSAGES)
+    .map((item) => {
+      const images = Array.isArray(item.images)
+        ? item.images
+            .filter((image) => typeof image === "string" && image.trim())
+            .slice(0, 4)
+        : [];
+      return images.length
+        ? { role: item.role, content: item.content, images }
+        : { role: item.role, content: item.content };
+    });
   const topLevelImages = Array.isArray(body.images)
-    ? body.images.filter((image) => typeof image === "string" && image.trim()).slice(0, 4)
+    ? body.images
+        .filter((image) => typeof image === "string" && image.trim())
+        .slice(0, 4)
     : [];
   if (topLevelImages.length) {
-    const lastUserIndex = recentMessages.findLastIndex((item) => item.role === "user");
+    const lastUserIndex = recentMessages.findLastIndex(
+      (item) => item.role === "user",
+    );
     if (lastUserIndex >= 0) {
       const existing = recentMessages[lastUserIndex].images || [];
       recentMessages[lastUserIndex] = {
@@ -294,35 +370,46 @@ app.post("/api/chat", async (req, res) => {
   // Route image requests away from known text-only models to an installed vision model.
   const hasImageData = (value) => {
     if (typeof value === "string") {
-      return /^(?:data:image\/[a-z0-9.+-]+;base64,)?[a-z0-9+/]{128,}={0,2}$/i.test(value.trim());
+      return /^(?:data:image\/[a-z0-9.+-]+;base64,)?[a-z0-9+/]{128,}={0,2}$/i.test(
+        value.trim(),
+      );
     }
     if (Array.isArray(value)) return value.some(hasImageData);
     if (!value || typeof value !== "object") return false;
-    return Object.entries(value).some(([key, nested]) =>
-      /^(images?|image_url|image)$/i.test(key) && hasImageData(nested),
+    return Object.entries(value).some(
+      ([key, nested]) =>
+        /^(images?|image_url|image)$/i.test(key) && hasImageData(nested),
     );
   };
   const containsImages = hasImageData(body.images) || hasImageData(messages);
   const normalizedModelName = selectedModel.toLowerCase().split(":")[0];
   const knownTextOnlyModel =
-    /^(llama3(?:\.\d+)?|qwen2\.5-coder|deepseek-coder|codellama|phi[234]?|gemma(?:2)?|mistral|mixtral)(?:$|-)/i.test(normalizedModelName);
+    /^(llama3(?:\.\d+)?|qwen2\.5-coder|deepseek-coder|codellama|phi[234]?|gemma(?:2)?|mistral|mixtral)(?:$|-)/i.test(
+      normalizedModelName,
+    );
 
   if (containsImages && knownTextOnlyModel) {
     try {
-      const response = await axios.get(`${OLLAMA_URL}/api/tags`, { timeout: 5000 });
+      const response = await axios.get(`${OLLAMA_URL}/api/tags`, {
+        timeout: 5000,
+      });
       const availableModels = (response.data?.models || [])
         .map((item) => item?.name)
         .filter((name) => typeof name === "string");
       const preferred = ["qwen2.5vl:3b", "llava"];
-      selectedModel = preferred.find((candidate) =>
-        availableModels.some((name) =>
-          candidate === "llava"
-            ? name.toLowerCase() === "llava" || name.toLowerCase().startsWith("llava:")
-            : name.toLowerCase() === candidate,
-        ),
-      ) || preferred[0];
+      selectedModel =
+        preferred.find((candidate) =>
+          availableModels.some((name) =>
+            candidate === "llava"
+              ? name.toLowerCase() === "llava" ||
+                name.toLowerCase().startsWith("llava:")
+              : name.toLowerCase() === candidate,
+          ),
+        ) || preferred[0];
     } catch (error) {
-      console.warn(`[Chat] Could not list vision models; trying qwen2.5vl:3b: ${error.message}`);
+      console.warn(
+        `[Chat] Could not list vision models; trying qwen2.5vl:3b: ${error.message}`,
+      );
       selectedModel = "qwen2.5vl:3b";
     }
   }
@@ -347,6 +434,7 @@ app.post("/api/chat", async (req, res) => {
   let tokenCount = 0;
   let lastPrinted = 0;
   let sawDone = false;
+  let fullContentAccumulator = "";
 
   res.on("close", () => {
     if (!res.writableFinished) {
@@ -440,7 +528,7 @@ app.post("/api/chat", async (req, res) => {
     }
   };
 
-  const handleLine = (line) => {
+  const handleLine = async (line) => {
     const trimmed = line.trim();
     if (!trimmed) return;
 
@@ -468,6 +556,7 @@ app.post("/api/chat", async (req, res) => {
 
     if (typeof data.message?.content === "string" && data.message.content) {
       tokenCount += 1;
+      fullContentAccumulator += data.message.content; // 👈 加上这一行，记录完整回复
       send({ content: data.message.content, done: false });
 
       if (tokenCount - lastPrinted >= 5) {
@@ -485,6 +574,55 @@ app.post("/api/chat", async (req, res) => {
       sawDone = true;
       send({ content: "", done: true, model: selectedModel });
       clearLine();
+
+      // ========================================
+      // 💾 Reference Model: Save Session & Messages separately
+      // ========================================
+      try {
+        // 1. Ensure the Session exists (upsert)
+        await Session.findOneAndUpdate(
+          { id: sessionId },
+          {
+            $set: { updatedAt: new Date() },
+            $setOnInsert: {
+              id: sessionId,
+              title: message.slice(0, 12).trim() || "New Chat",
+              mode: normalizedMode,
+              model: selectedModel,
+              systemPrompt: customPrompt,
+            },
+          },
+          { upsert: true, new: true },
+        );
+
+        // 2. Prepare message documents
+        const userMsgObj = {
+          id: `msg_${Date.now()}_u`,
+          sessionId: sessionId,
+          role: "user",
+          content: message,
+          createdAt: new Date().toISOString(),
+        };
+        const assistantMsgObj = {
+          id: `msg_${Date.now()}_a`,
+          sessionId: sessionId,
+          role: "assistant",
+          content: fullContentAccumulator,
+          createdAt: new Date().toISOString(),
+        };
+
+        // 3. Insert messages into the separate Message collection
+        await Message.insertMany([userMsgObj, assistantMsgObj]);
+
+        console.log(
+          `  ${c.green}💾 [DB-Ref] Session & Messages saved successfully.${c.reset}`,
+        );
+      } catch (dbError) {
+        console.error(
+          `  ${c.red}❌ [DB-Ref] Failed to save reference data: ${dbError.message}${c.reset}`,
+        );
+      }
+      // ========================================
 
       const evalCount = data.eval_count || tokenCount;
       const evalSec = (data.eval_duration || 0) / 1e9;
@@ -563,22 +701,24 @@ app.post("/api/chat", async (req, res) => {
 // Start Server
 // ========================================
 
-const server = app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-  console.log(`Ollama URL: ${OLLAMA_URL}`);
-  console.log(`CORS origins: ${CORS_ORIGINS.join(", ")}`);
-  console.log(`Max context messages: ${MAX_CONTEXT_MESSAGES}`);
-  console.log(`Max output tokens: ${MAX_OUTPUT_TOKENS}`);
-  console.log(`Context window (num_ctx): ${NUM_CTX}`);
-});
+connectDB().then(() => {
+  const server = app.listen(PORT, () => {
+    console.log(`Server running at http://localhost:${PORT}`);
+    console.log(`Ollama URL: ${OLLAMA_URL}`);
+    console.log(`CORS origins: ${CORS_ORIGINS.join(", ")}`);
+    console.log(`Max context messages: ${MAX_CONTEXT_MESSAGES}`);
+    console.log(`Max output tokens: ${MAX_OUTPUT_TOKENS}`);
+    console.log(`Context window (num_ctx): ${NUM_CTX}`);
+  });
 
-server.on("error", (error) => {
-  if (error.code === "EADDRINUSE") {
-    console.error(
-      `Port ${PORT} is already in use. Stop the other process or change PORT in .env.`,
-    );
-  } else {
-    console.error("Server error:", error);
-  }
-  process.exit(1);
+  server.on("error", (error) => {
+    if (error.code === "EADDRINUSE") {
+      console.error(
+        `Port ${PORT} is already in use. Stop the other process or change PORT in .env.`,
+      );
+    } else {
+      console.error("Server error:", error);
+    }
+    process.exit(1);
+  });
 });

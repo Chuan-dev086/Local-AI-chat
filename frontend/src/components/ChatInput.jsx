@@ -7,6 +7,7 @@ import {
   Menu,
   MenuItem,
   Divider,
+  Typography,
 } from "@mui/material";
 import {
   ArrowUpward,
@@ -18,28 +19,6 @@ import {
 } from "@mui/icons-material";
 import { useState, useRef } from "react";
 import { getChatInputStyles } from "../theme/theme";
-
-const BUILTIN_PROMPT_TEMPLATES = [
-  {
-    name: "Default assistant",
-    prompt: "",
-  },
-  {
-    name: "Python expert",
-    prompt:
-      "You are an expert Python developer. Give accurate, idiomatic Python guidance, explain important tradeoffs, and include runnable examples when useful.",
-  },
-  {
-    name: "Socratic tutor",
-    prompt:
-      "You are a patient Socratic tutor. Help the user learn by asking focused questions and offering hints before giving a full solution. Adapt to their level.",
-  },
-  {
-    name: "Writing assistant",
-    prompt:
-      "You are a thoughtful writing assistant. Help the user improve clarity, structure, and tone while preserving their meaning and voice.",
-  },
-];
 
 function ChatInput({
   input,
@@ -276,38 +255,33 @@ function ChatInput({
           slotProps={{
             paper: {
               sx: {
-                maxHeight: 300, // 👈 解决长列表滚动问题
+                maxHeight: 300,
+                minWidth: 200,
                 bgcolor: theme === "dark" ? "#1e293b" : "background.paper",
                 color: theme === "dark" ? "#e2e8f0" : "text.primary",
               },
             },
           }}
         >
-          {BUILTIN_PROMPT_TEMPLATES.map((template) => (
-            <MenuItem
-              key={template.name}
-              onClick={() => {
-                onSelectPromptTemplate?.(template.prompt);
-                setPromptMenuAnchor(null);
-              }}
-            >
-              {template.name}
+          {customPrompts.length === 0 ? (
+            <MenuItem disabled>
+              <Typography variant="body2" color="text.secondary">
+                No custom prompts yet
+              </Typography>
             </MenuItem>
-          ))}
-
-          {customPrompts.length > 0 && <Divider sx={{ my: 1 }} />}
-
-          {customPrompts.map((template) => (
-            <MenuItem
-              key={template.id}
-              onClick={() => {
-                onSelectPromptTemplate?.(template.prompt);
-                setPromptMenuAnchor(null);
-              }}
-            >
-              ⭐ {template.name}
-            </MenuItem>
-          ))}
+          ) : (
+            customPrompts.map((template) => (
+              <MenuItem
+                key={template.id}
+                onClick={() => {
+                  onSelectPromptTemplate?.(template.prompt);
+                  setPromptMenuAnchor(null);
+                }}
+              >
+                ⭐ {template.name}
+              </MenuItem>
+            ))
+          )}
 
           <Divider sx={{ my: 1 }} />
           <MenuItem
