@@ -33,9 +33,12 @@ export async function clearChat(sessionId) {
       body: JSON.stringify({ sessionId }),
     });
   } catch (error) {
-    throw new ChatApiError("Unable to connect to the backend. Please make sure it is running.", {
-      cause: error,
-    });
+    throw new ChatApiError(
+      "Unable to connect to the backend. Please make sure it is running.",
+      {
+        cause: error,
+      },
+    );
   }
 
   if (!response.ok) {
@@ -129,6 +132,49 @@ export async function fetchModels({ signal } = {}) {
 }
 
 // ========================================
+// Context Window & Token Truncation Helper
+// ========================================
+
+const MAX_SAFE_CONTEXT_CHARS = 100;
+
+/**
+ * Truncate message history to fit within safe character limits and ensure
+ * the first message starts with 'user' to prevent role-alternating errors.
+ * Time Complexity: O(n) where n is the number of messages.
+ * Space Complexity: O(n) for the filtered message array.
+ * Edge Cases: Drops leading 'assistant' messages if the initial user message was truncated.
+ */
+function truncateMessagesByCharLimit(
+  messages,
+  maxChars = MAX_SAFE_CONTEXT_CHARS,
+) {
+  if (!Array.isArray(messages) || messages.length === 0) return [];
+
+  let accumulatedChars = 0;
+  const truncated = [];
+
+  // Iterate backwards from the newest message to the oldest
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    const contentLen = typeof msg.content === "string" ? msg.content.length : 0;
+
+    if (accumulatedChars + contentLen > maxChars && truncated.length > 0) {
+      break;
+    }
+
+    accumulatedChars += contentLen;
+    truncated.unshift(msg);
+  }
+
+  // Ensure the first message in the array is always from the 'user' role
+  while (truncated.length > 0 && truncated[0].role !== "user") {
+    truncated.shift();
+  }
+
+  return truncated;
+}
+
+// ========================================
 // Streaming chat (NDJSON)
 // ========================================
 
@@ -156,6 +202,9 @@ export async function streamChat({
     throw new TypeError("streamChat: onChunk must be a function.");
   }
 
+  // 🛡️ Apply safe context window truncation with role validation
+  const safeMessages = truncateMessagesByCharLimit(messages);
+
   let response;
   try {
     response = await fetch(CHAT_URL, {
@@ -167,7 +216,7 @@ export async function streamChat({
         mode,
         model,
         systemPrompt,
-        messages,
+        messages: safeMessages,
       }),
       signal,
     });
@@ -193,7 +242,6 @@ export async function streamChat({
   let buffer = "";
   let finished = false;
 
-  // 注意：此函数中抛出的 ChatApiError 不会被下方的解析 try/catch 吞掉
   const handleLine = (line) => {
     const trimmed = line.trim();
     if (!trimmed) return;
@@ -246,7 +294,6 @@ export async function streamChat({
       }
     }
 
-    // 冲刷解码器中残留的字节，并处理最后一行（可能没有换行符）
     if (!finished) {
       buffer += decoder.decode();
       if (buffer.trim()) handleLine(buffer);
@@ -258,7 +305,6 @@ export async function streamChat({
 
     return { completed: true };
   } finally {
-    // 提前结束或出错时释放底层连接，已结束时 cancel 无副作用
     reader.cancel().catch(() => {});
   }
 }
