@@ -239,6 +239,85 @@ app.get("/api/sessions", async (req, res) => {
 });
 
 // ========================================
+// Clear all sessions and messages (Delete all)
+// ========================================
+app.delete("/api/sessions", async (req, res) => {
+  try {
+    await Session.deleteMany({});
+    await Message.deleteMany({});
+    console.log(
+      `  ${c.yellow}🗑️ [DB] All sessions and messages cleared.${c.reset}`,
+    );
+    res.json({ success: true, message: "All chats cleared." });
+  } catch (error) {
+    console.error("[Sessions] Failed to clear all sessions:", error.message);
+    res.status(500).json({ error: "Failed to clear all chats." });
+  }
+});
+
+// ========================================
+// Delete a session and all its associated messages
+// ========================================
+app.delete("/api/sessions/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 1. Delete the session document
+    const deletedSession = await Session.findOneAndDelete({ id });
+    if (!deletedSession) {
+      return res.status(404).json({ error: "Session not found." });
+    }
+
+    // 2. Cascade delete all messages belonging to this session
+    await Message.deleteMany({ sessionId: id });
+
+    console.log(
+      `  ${c.yellow}🗑️ [DB] Session ${id.slice(0, 8)} and its messages deleted.${c.reset}`,
+    );
+    res.json({ success: true, sessionId: id });
+  } catch (error) {
+    console.error("[Sessions] Failed to delete session:", error.message);
+    res.status(500).json({ error: "Failed to delete chat session." });
+  }
+});
+
+// ========================================
+// Rename or update session (Title, Model, Mode)
+// ========================================
+app.patch("/api/sessions/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, model, mode } = req.body;
+
+    const updateFields = { updatedAt: new Date() };
+    if (title && typeof title === "string" && title.trim()) {
+      updateFields.title = title.trim();
+    }
+    if (model && typeof model === "string") {
+      updateFields.model = model;
+    }
+    if (mode && (mode === "chat" || mode === "code")) {
+      updateFields.mode = mode;
+    }
+
+    const updatedSession = await Session.findOneAndUpdate(
+      { id },
+      { $set: updateFields },
+      { new: true },
+    );
+
+    if (!updatedSession) {
+      return res.status(404).json({ error: "Session not found." });
+    }
+
+    res.json({ success: true, session: updatedSession });
+  } catch (error) {
+    console.error("[Sessions] Failed to update session:", error.message);
+    res.status(500).json({ error: "Failed to update chat session." });
+  }
+});
+
+// ========================================
 // Toggle session pin status
 // ========================================
 app.patch("/api/sessions/:id/pin", async (req, res) => {

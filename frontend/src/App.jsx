@@ -1,15 +1,7 @@
 // src/App.jsx
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert } from "@mui/material";
-import { useCustomPrompts } from "./hooks/useCustomPrompts";
-import PromptManagerDialog from "./components/PromptManagerDialog";
 
 import Sidebar from "./components/Sidebar";
 import ChatHeader from "./components/ChatHeader";
@@ -17,6 +9,7 @@ import MessageList from "./components/MessageList";
 import ChatInput from "./components/ChatInput";
 import SystemPromptDialog from "./components/SystemPromptDialog";
 import RenameDialog from "./components/RenameDialog";
+import PromptManagerDialog from "./components/PromptManagerDialog";
 import { getThemeStyles } from "./theme/theme";
 import {
   ChatApiError,
@@ -25,15 +18,8 @@ import {
   isAbortError,
   streamChat,
 } from "./api/chatApi";
-import {
-  getStorageError,
-  setStorageError,
-  subscribeStorageError,
-} from "./store/storageStatus";
-import { readChatState, writeChatState } from "./store/chatStorage";
+import { useCustomPrompts } from "./hooks/useCustomPrompts";
 
-const STORAGE_KEY = "local_ai_chat_sessions_v2";
-const CORRUPT_BACKUP_KEY = `${STORAGE_KEY}_corrupt_backup`;
 const THEME_KEY = "local_ai_chat_theme";
 const SIDEBAR_KEY = "local_ai_chat_sidebar_collapsed";
 
@@ -45,10 +31,6 @@ const DEFAULT_MODELS = {
   chat: "llama3.2:3b",
   code: "qwen2.5-coder:3b",
 };
-
-// ========================================
-// Identifiers & time helpers
-// ========================================
 
 function randomSuffix() {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -66,9 +48,15 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-// ========================================
-// Session & message factories
-// ========================================
+function sortSessions(sessions) {
+  if (!Array.isArray(sessions)) return [];
+  return [...sessions].sort((a, b) => {
+    if (Boolean(a.isPinned) !== Boolean(b.isPinned)) {
+      return b.isPinned ? 1 : -1;
+    }
+    return new Date(b.updatedAt) - new Date(a.updatedAt);
+  });
+}
 
 function createNewSession(mode = "chat") {
   const now = nowIso();
@@ -79,20 +67,10 @@ function createNewSession(mode = "chat") {
     model: DEFAULT_MODELS[mode] || DEFAULT_MODELS.chat,
     systemPrompt: "",
     messages: [],
+    isPinned: false,
     createdAt: now,
     updatedAt: now,
   };
-}
-
-// 统一的会话排序函数：先按 isPinned 降序（置顶在前），再按 updatedAt 降序（最近更新在前）
-function sortSessions(sessions) {
-  if (!Array.isArray(sessions)) return [];
-  return [...sessions].sort((a, b) => {
-    if (Boolean(a.isPinned) !== Boolean(b.isPinned)) {
-      return b.isPinned ? 1 : -1; // true 排在前面
-    }
-    return new Date(b.updatedAt) - new Date(a.updatedAt);
-  });
 }
 
 function getTitleFromMessage(message) {
@@ -100,8 +78,6 @@ function getTitleFromMessage(message) {
   return title || "New Chat";
 }
 
-// 将 API 消息转换为发给后端的内容：有附件时把文件内容拼入当前问题
-// 注意：每一轮都会重新携带附件内容，保证追问时模型仍能看到文件
 function toApiMessage(message) {
   if (message.role === "user" && message.imageBase64) {
     return {
@@ -123,7 +99,6 @@ function toApiMessage(message) {
   };
 }
 
-// 选择本次请求使用的模型：会话模型不在可用列表中时，回退到模式默认模型
 function resolveSessionModel(sessionModel, mode, availableModels) {
   if (availableModels.length === 0 || availableModels.includes(sessionModel)) {
     return { model: sessionModel || DEFAULT_MODELS[mode], changed: false };
@@ -137,17 +112,11 @@ function resolveSessionModel(sessionModel, mode, availableModels) {
   return { model, changed: true };
 }
 
-// ========================================
-// Persistence: load & normalize
-// ========================================
-
 function normalizeMessage(raw) {
   if (!raw || typeof raw !== "object") return null;
   if (raw.role !== "user" && raw.role !== "assistant") return null;
 
   const content = typeof raw.content === "string" ? raw.content : "";
-
-  // 上次生成中断留下的空 assistant 消息直接丢弃
   if (raw.role === "assistant" && !content) return null;
 
   return {
@@ -186,128 +155,13 @@ function normalizeSession(raw) {
         ? raw.model
         : DEFAULT_MODELS[mode],
     systemPrompt: typeof raw.systemPrompt === "string" ? raw.systemPrompt : "",
-    isPinned: Boolean(raw.isPinned), // 👈 关键修复：确保清洗数据时保留后端返回的 isPinned 状态
+    isPinned: Boolean(raw.isPinned),
     messages,
     createdAt: typeof raw.createdAt === "string" ? raw.createdAt : now,
     updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : now,
   };
 }
 
-// 将损坏的原始数据备份到单独的 key；返回是否备份成功
-function backupRawStorage(raw) {
-  try {
-    localStorage.setItem(CORRUPT_BACKUP_KEY, raw);
-    return true;
-  } catch (error) {
-    console.error("Failed to back up corrupted chat data:", error);
-    return false;
-  }
-}
-
-function getInitialChatState(raw) {
-  const fallbackSession = createNewSession();
-  const fallback = {
-    activeSessionId: fallbackSession.id,
-    sessions: [fallbackSession],
-  };
-
-  if (!raw) {
-    return { state: fallback, notice: null, persistBlocked: false };
-  }
-
-  let parsed = null;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (error) {
-    console.error("Failed to parse saved chats:", error);
-  }
-
-  // JSON 解析失败，或结构不符合预期：视为损坏数据，先备份再回退
-  if (!parsed || !Array.isArray(parsed.sessions)) {
-    const backedUp = backupRawStorage(raw);
-    return {
-      state: fallback,
-      notice: backedUp
-        ? {
-            severity: "warning",
-            message:
-              "检测到损坏的聊天数据，已备份到 localStorage 的 local_ai_chat_sessions_v2_corrupt_backup 中。",
-          }
-        : {
-            severity: "error",
-            message:
-              "聊天数据已损坏，且备份失败。为避免覆盖原数据，本次不会保存新的聊天记录，请先清理浏览器存储后刷新。",
-          },
-      persistBlocked: !backedUp,
-    };
-  }
-
-  const sessions = parsed.sessions.map(normalizeSession).filter(Boolean);
-
-  // 结构正确但没有任何会话：直接使用新会话，不视为损坏
-  if (sessions.length === 0) {
-    return { state: fallback, notice: null, persistBlocked: false };
-  }
-
-  const activeExists = sessions.some(
-    (session) => session.id === parsed.activeSessionId,
-  );
-
-  return {
-    state: {
-      activeSessionId: activeExists ? parsed.activeSessionId : sessions[0].id,
-      sessions,
-    },
-    notice: null,
-    persistBlocked: false,
-  };
-}
-
-async function loadChatState() {
-  let legacyRaw = null;
-  try {
-    legacyRaw = localStorage.getItem(STORAGE_KEY);
-  } catch (error) {
-    console.warn("Could not access legacy chat storage:", error);
-  }
-
-  let stored;
-  try {
-    stored = await readChatState();
-  } catch (error) {
-    console.warn("Could not read chats from IndexedDB:", error);
-  }
-
-  // A localStorage copy can be a recovery copy left by a previous failed IDB write.
-  if (legacyRaw) {
-    const legacyState = getInitialChatState(legacyRaw);
-    if (legacyState.persistBlocked) return legacyState;
-    try {
-      await writeChatState(legacyState.state);
-      localStorage.removeItem(STORAGE_KEY);
-      return legacyState;
-    } catch (error) {
-      console.warn(
-        "Could not migrate chats to IndexedDB; retaining localStorage copy:",
-        error,
-      );
-      return {
-        ...legacyState,
-        notice: {
-          severity: "warning",
-          message:
-            "Chat storage could not be upgraded. Existing chats remain in browser storage.",
-        },
-      };
-    }
-  }
-
-  if (stored && Array.isArray(stored.sessions)) {
-    return getInitialChatState(JSON.stringify(stored));
-  }
-
-  return getInitialChatState(null);
-}
 function getInitialTheme() {
   try {
     const savedTheme = localStorage.getItem(THEME_KEY);
@@ -326,62 +180,79 @@ function getInitialSidebarCollapsed() {
   }
 }
 
-// ========================================
-// App
-// ========================================
-
 function App() {
-  const [initialChat] = useState(() => getInitialChatState(null));
   const [chatStorageReady, setChatStorageReady] = useState(false);
-
   const [theme, setTheme] = useState(getInitialTheme);
-  const [sessions, setSessions] = useState(initialChat.state.sessions);
-  const [activeSessionId, setActiveSessionId] = useState(
-    initialChat.state.activeSessionId,
-  );
-  const [notice, setNotice] = useState(initialChat.notice);
-  const storageError = useSyncExternalStore(
-    subscribeStorageError,
-    getStorageError,
-  );
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [models, setModels] = useState([]);
-  const [isSystemPromptOpen, setIsSystemPromptOpen] = useState(false);
-  const [isRenameOpen, setIsRenameOpen] = useState(false);
-  const [attachedFile, setAttachedFile] = useState(null);
-  const [showScrollBottom, setShowScrollBottom] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(
-    getInitialSidebarCollapsed,
-  );
+  const [sessions, setSessions] = useState([]);
+  const [activeSessionId, setActiveSessionId] = useState(null);
+  const [notice, setNotice] = useState(null);
+
   const {
     prompts: customPrompts,
     addPrompt,
     updatePrompt,
     deletePrompt,
   } = useCustomPrompts();
-  const [isPromptManagerOpen, setIsPromptManagerOpen] = useState(false);
 
-  const persistBlockedRef = useRef(initialChat.persistBlocked);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [models, setModels] = useState([]);
+  const [isSystemPromptOpen, setIsSystemPromptOpen] = useState(false);
+  const [isRenameOpen, setIsRenameOpen] = useState(false);
+  const [isPromptManagerOpen, setIsPromptManagerOpen] = useState(false);
+  const [attachedFile, setAttachedFile] = useState(null);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    getInitialSidebarCollapsed,
+  );
+
   useEffect(() => {
     let cancelled = false;
-    loadChatState()
-      .then((loaded) => {
+    fetch("http://localhost:5000/api/sessions")
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to fetch sessions from server.");
+        return res.json();
+      })
+      .then((data) => {
         if (cancelled) return;
-        setSessions(sortSessions(loaded.state.sessions)); 
-        setActiveSessionId(loaded.state.activeSessionId);
-        if (loaded.notice) setNotice(loaded.notice);
-        persistBlockedRef.current = loaded.persistBlocked;
+        const normalized = (data.sessions || [])
+          .map(normalizeSession)
+          .filter(Boolean);
+        if (normalized.length > 0) {
+          const sorted = sortSessions(normalized);
+          setSessions(sorted);
+          setActiveSessionId(sorted[0].id);
+        } else {
+          const defaultSession = createNewSession();
+          setSessions([defaultSession]);
+          setActiveSessionId(defaultSession.id);
+          fetch("http://localhost:5000/api/sessions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(defaultSession),
+          }).catch(console.error);
+        }
         setChatStorageReady(true);
       })
       .catch((error) => {
-        console.warn("Could not initialize chat storage:", error);
-        if (!cancelled) setChatStorageReady(true);
+        console.warn("Could not load sessions from backend:", error);
+        if (!cancelled) {
+          setNotice({
+            severity: "error",
+            message: "无法连接到后端数据库，请确认后端已启动。",
+          });
+          const fallback = createNewSession();
+          setSessions([fallback]);
+          setActiveSessionId(fallback.id);
+          setChatStorageReady(true);
+        }
       });
+
     return () => {
       cancelled = true;
     };
   }, []);
+
   const chatEndRef = useRef(null);
   const messagesAreaRef = useRef(null);
   const isNearBottomRef = useRef(true);
@@ -396,30 +267,6 @@ function App() {
     [sessions, activeSessionId],
   );
 
-  // =========================
-  // Effects
-  // =========================
-
-  // Persist chats after streaming settles; initialization prevents overwriting the loaded state.
-  useEffect(() => {
-    if (!chatStorageReady || loading || persistBlockedRef.current) return;
-    const state = { activeSessionId, sessions };
-    writeChatState(state)
-      .then(() => setStorageError(null))
-      .catch((error) => {
-        console.warn("Failed to persist chats in IndexedDB:", error);
-        setStorageError("Chat records could not be saved to browser storage.");
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        } catch (fallbackError) {
-          console.warn(
-            "Could not save a localStorage recovery copy:",
-            fallbackError,
-          );
-        }
-      });
-  }, [activeSessionId, sessions, loading, chatStorageReady]);
-
   useEffect(() => {
     try {
       localStorage.setItem(THEME_KEY, theme);
@@ -432,7 +279,7 @@ function App() {
     try {
       localStorage.setItem(SIDEBAR_KEY, String(sidebarCollapsed));
     } catch {
-      // Ignore unavailable localStorage for this nonessential preference.
+      // Ignore
     }
   }, [sidebarCollapsed]);
 
@@ -446,24 +293,15 @@ function App() {
       .catch((error) => {
         if (controller.signal.aborted || isAbortError(error)) return;
         console.error("Failed to fetch model list:", error);
-        setNotice({
-          severity: "warning",
-          message:
-            error instanceof ChatApiError
-              ? `${error.message}（当前无法切换模型）`
-              : "无法获取模型列表。",
-        });
       });
 
     return () => controller.abort();
   }, []);
 
-  // 切换会话时，默认认为用户位于底部
   useEffect(() => {
     isNearBottomRef.current = true;
   }, [activeSessionId]);
 
-  // 仅当用户位于底部附近时才自动滚动，避免打断阅读历史消息
   useEffect(() => {
     if (!isNearBottomRef.current) return;
     chatEndRef.current?.scrollIntoView({
@@ -472,14 +310,12 @@ function App() {
     });
   }, [activeSession?.messages, loading]);
 
-  // =========================
-  // State helpers
-  // =========================
-
   const patchSession = (sessionId, updater) => {
     setSessions((prevSessions) =>
-      prevSessions.map((session) =>
-        session.id === sessionId ? updater(session) : session,
+      sortSessions(
+        prevSessions.map((session) =>
+          session.id === sessionId ? updater(session) : session,
+        ),
       ),
     );
   };
@@ -501,13 +337,20 @@ function App() {
     setTheme((prev) => (prev === "light" ? "dark" : "light"));
   const toggleSidebar = () => setSidebarCollapsed((prev) => !prev);
 
-  // =========================
-  // Session handlers
-  // =========================
-
-  const handleNewChat = () => {
+  const handleNewChat = async () => {
     if (loading) return;
     const newSession = createNewSession(activeSession?.mode || "chat");
+
+    try {
+      await fetch("http://localhost:5000/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newSession),
+      });
+    } catch (error) {
+      console.error("Failed to create session on backend:", error);
+    }
+
     setSessions((prev) => sortSessions([newSession, ...prev]));
     setActiveSessionId(newSession.id);
     setInput("");
@@ -519,8 +362,18 @@ function App() {
     setInput("");
   };
 
-  const handleRenameSession = (sessionId, title) => {
+  const handleRenameSession = async (sessionId, title) => {
     if (loading) return;
+    try {
+      await fetch(`http://localhost:5000/api/sessions/${sessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+    } catch (error) {
+      console.error("Failed to rename session on backend:", error);
+    }
+
     patchSession(sessionId, (session) => ({
       ...session,
       title,
@@ -528,7 +381,7 @@ function App() {
     }));
   };
 
-  const handleDeleteSession = (event, sessionId) => {
+  const handleDeleteSession = async (event, sessionId) => {
     event.stopPropagation();
     if (loading) return;
 
@@ -536,25 +389,35 @@ function App() {
     if (!window.confirm(`Delete "${sessionToDelete?.title || "this chat"}"?`))
       return;
 
+    try {
+      await fetch(`http://localhost:5000/api/sessions/${sessionId}`, {
+        method: "DELETE",
+      });
+    } catch (error) {
+      console.error("Failed to delete session on backend:", error);
+    }
+
     const remainingSessions = sessions.filter((s) => s.id !== sessionId);
     if (remainingSessions.length === 0) {
       const newSession = createNewSession();
       setSessions([newSession]);
       setActiveSessionId(newSession.id);
       setInput("");
+      fetch("http://localhost:5000/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newSession),
+      }).catch(console.error);
       return;
     }
 
-    setSessions(remainingSessions);
+    setSessions(sortSessions(remainingSessions));
     if (sessionId === activeSessionId) {
       setActiveSessionId(remainingSessions[0].id);
       setInput("");
     }
   };
 
-  // =========================
-  // Pin session handler
-  // =========================
   const handleTogglePin = async (sessionId, newPinStatus) => {
     try {
       const response = await fetch(
@@ -566,22 +429,13 @@ function App() {
         },
       );
 
-      if (!response.ok) {
-        throw new Error("Failed to update pin status on server.");
-      }
+      if (!response.ok) throw new Error("Failed to update pin status.");
 
-      // 更新本地 sessions 状态，并严格按照后端规则重新排序：isPinned 降序，updatedAt 降序
       setSessions((prevSessions) => {
         const updated = prevSessions.map((s) =>
           s.id === sessionId ? { ...s, isPinned: newPinStatus } : s,
         );
-
-        return updated.sort((a, b) => {
-          if (a.isPinned !== b.isPinned) {
-            return b.isPinned ? 1 : -1; // true (pinned) comes first
-          }
-          return new Date(b.updatedAt) - new Date(a.updatedAt);
-        });
+        return sortSessions(updated);
       });
     } catch (error) {
       console.error("Failed to toggle pin:", error);
@@ -595,11 +449,35 @@ function App() {
   };
 
   const handleSaveRename = (newTitle) => {
-    updateActiveSession((session) => ({
-      ...session,
-      title: newTitle,
-      updatedAt: nowIso(),
-    }));
+    handleRenameSession(activeSession.id, newTitle);
+  };
+
+  // 👈 修复 2：Clear all chats 接入后端 DELETE /api/sessions 接口
+  const handleClearAllChats = async () => {
+    if (loading) return;
+    if (!window.confirm("确定要清空所有聊天记录吗？此操作不可逆。")) return;
+
+    try {
+      const res = await fetch("http://localhost:5000/api/sessions", {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Failed to clear sessions.");
+
+      const freshSession = createNewSession();
+      await fetch("http://localhost:5000/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(freshSession),
+      });
+
+      setSessions([freshSession]);
+      setActiveSessionId(freshSession.id);
+      setInput("");
+      setNotice({ severity: "success", message: "All chats cleared." });
+    } catch (error) {
+      console.error("Failed to clear all chats:", error);
+      setNotice({ severity: "error", message: "Failed to clear chats." });
+    }
   };
 
   const handleClearChat = async () => {
@@ -610,6 +488,17 @@ function App() {
     const sessionId = activeSession.id;
     try {
       await clearChat(sessionId);
+      await fetch(`http://localhost:5000/api/sessions/${sessionId}`, {
+        method: "DELETE",
+      });
+      const freshSession = createNewSession(activeSession.mode);
+      freshSession.id = sessionId;
+      await fetch("http://localhost:5000/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(freshSession),
+      });
+
       patchSession(sessionId, (session) => ({
         ...session,
         title: "New Chat",
@@ -627,22 +516,47 @@ function App() {
     }
   };
 
-  const handleModeChange = (event) => {
+  // 👈 修复 1：模型与模式切换持久化到后端
+  const handleModeChange = async (event) => {
     const newMode = event.target.value;
-    updateActiveSession((session) => {
-      const oldDefault = DEFAULT_MODELS[session.mode];
-      const usingOldDefault = !session.model || session.model === oldDefault;
-      return {
-        ...session,
-        mode: newMode,
-        model: usingOldDefault ? DEFAULT_MODELS[newMode] : session.model,
-        updatedAt: nowIso(),
-      };
-    });
+    const oldDefault = DEFAULT_MODELS[activeSession.mode];
+    const usingOldDefault =
+      !activeSession.model || activeSession.model === oldDefault;
+    const newModel = usingOldDefault
+      ? DEFAULT_MODELS[newMode]
+      : activeSession.model;
+
+    try {
+      await fetch(`http://localhost:5000/api/sessions/${activeSession.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: newMode, model: newModel }),
+      });
+    } catch (error) {
+      console.error("Failed to persist mode change:", error);
+    }
+
+    updateActiveSession((session) => ({
+      ...session,
+      mode: newMode,
+      model: newModel,
+      updatedAt: nowIso(),
+    }));
   };
 
-  const handleModelChange = (event) => {
+  const handleModelChange = async (event) => {
     const newModel = event.target.value;
+
+    try {
+      await fetch(`http://localhost:5000/api/sessions/${activeSession.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: newModel }),
+      });
+    } catch (error) {
+      console.error("Failed to persist model change:", error);
+    }
+
     updateActiveSession((session) => ({
       ...session,
       model: newModel,
@@ -678,10 +592,6 @@ function App() {
     abortRef.current?.abort();
   };
 
-  // =========================
-  // Generation (shared by send / edit / regenerate)
-  // =========================
-
   const startGeneration = async ({
     sessionId,
     baseMessages,
@@ -693,7 +603,6 @@ function App() {
     requestContent,
     sessionPatch = {},
   }) => {
-    // 同步设置 abortRef，防止同一帧内的重复调用
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -717,7 +626,6 @@ function App() {
       updatedAt: timestamp,
     }));
 
-    // 将高频 token 合并为每帧一次状态更新，减少重渲染
     let pending = "";
     let frameId = null;
 
@@ -762,7 +670,6 @@ function App() {
       flushPending();
 
       if (isAbortError(error) || controller.signal.aborted) {
-        // 用户主动停止：移除空的占位消息，保留已生成的部分内容
         patchSession(sessionId, (session) => ({
           ...session,
           messages: session.messages.filter(
@@ -790,10 +697,6 @@ function App() {
       setLoading(false);
     }
   };
-
-  // =========================
-  // Send Message
-  // =========================
 
   const handleSendMessage = async () => {
     const userText = input.trim();
@@ -855,10 +758,6 @@ function App() {
     });
   };
 
-  // =========================
-  // Edit & Regenerate
-  // =========================
-
   const handleEditMessage = async (messageIndex, newContent) => {
     const editedText = newContent.trim();
     if (!editedText || loading || !activeSession) return;
@@ -877,7 +776,6 @@ function App() {
       models,
     );
 
-    // 编辑时保留原消息的附件，避免文件上下文丢失
     const userMessage = {
       id: createMessageId(),
       role: "user",
@@ -918,7 +816,6 @@ function App() {
     if (loading || !activeSession || abortRef.current) return;
     const messages = activeSession.messages;
 
-    // 用户消息的重发按钮传入的是下一条（assistant）索引；assistant 的重生成按钮传入自身索引
     let targetUserIndex;
     if (messages[assistantIndex]?.role === "user") {
       targetUserIndex = assistantIndex;
@@ -943,10 +840,6 @@ function App() {
 
     handleEditMessage(targetUserIndex, userMessage.content);
   };
-
-  // =========================
-  // Global Shortcuts
-  // =========================
 
   useEffect(() => {
     const handleGlobalKeyDown = (e) => {
@@ -985,10 +878,6 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, sidebarCollapsed]);
 
-  // =========================
-  // Scroll tracking
-  // =========================
-
   const handleMessagesScroll = (event) => {
     const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
@@ -1003,14 +892,10 @@ function App() {
     container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
   };
 
-  // =========================
-  // UI
-  // =========================
-
   if (!chatStorageReady) {
     return (
       <main style={themeStyles.page} aria-live="polite">
-        Loading chats…
+        Loading chats from MongoDB…
       </main>
     );
   }
@@ -1029,20 +914,11 @@ function App() {
           onDeleteSession={handleDeleteSession}
           onRenameSession={handleRenameSession}
           onTogglePin={handleTogglePin}
+          onClearAllChats={handleClearAllChats} // 👈 传入清空所有会话的回调
           searchInputRef={searchInputRef}
         />
 
         <div style={themeStyles.mainContent}>
-          {storageError && (
-            <Alert
-              severity="error"
-              onClose={() => setStorageError(null)}
-              sx={{ m: 1, mb: 0 }}
-            >
-              {storageError}
-            </Alert>
-          )}
-
           {notice && (
             <Alert
               severity={notice.severity}
@@ -1121,14 +997,14 @@ function App() {
                 activeSession={activeSession}
                 theme={theme}
                 attachedFile={attachedFile}
-                customPrompts={customPrompts} // 👈 传自定义模板列表
+                customPrompts={customPrompts}
                 onAttachFile={setAttachedFile}
                 onRemoveFile={() => setAttachedFile(null)}
                 onInputChange={setInput}
                 onSendMessage={handleSendMessage}
                 onStop={handleStop}
                 onSelectPromptTemplate={handleSelectPromptTemplate}
-                onOpenPromptManager={() => setIsPromptManagerOpen(true)} // 👈 触发打开弹窗
+                onOpenPromptManager={() => setIsPromptManagerOpen(true)}
               />
             </div>
           </div>

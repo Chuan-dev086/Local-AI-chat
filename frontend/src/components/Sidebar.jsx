@@ -10,7 +10,6 @@ import {
   IconButton,
 } from "@mui/material";
 import { Search, PushPin, PushPinOutlined } from "@mui/icons-material";
-import { clearChatState } from "../store/chatStorage";
 import { getSidebarStyles, getThemeStyles } from "../theme/theme";
 
 function Sidebar({
@@ -23,7 +22,8 @@ function Sidebar({
   onSelectSession,
   onDeleteSession,
   onRenameSession,
-  onTogglePin, // 👈 新增：接收置顶处理函数
+  onTogglePin,
+  onClearAllChats, // 👈 接收清空所有会话的回调
   searchInputRef,
 }) {
   const styles = getSidebarStyles(theme, collapsed);
@@ -54,15 +54,11 @@ function Sidebar({
     }
   };
 
-  // 过滤逻辑：搜标题 或 搜消息内容
+  // 👈 修复 3：只根据 session.title 进行搜索，删掉 messages 匹配逻辑
   const filteredSessions = sessions.filter((session) => {
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
-    const matchTitle = session.title.toLowerCase().includes(query);
-    const matchContent =
-      Array.isArray(session.messages) &&
-      session.messages.some((msg) => msg.content.toLowerCase().includes(query));
-    return matchTitle || matchContent;
+    return session.title.toLowerCase().includes(query);
   });
 
   return (
@@ -82,7 +78,6 @@ function Sidebar({
             + New Chat
           </Button>
 
-          {/* 搜索框 */}
           <Box sx={{ mt: 2 }}>
             <TextField
               inputRef={searchInputRef}
@@ -114,7 +109,7 @@ function Sidebar({
           ) : (
             filteredSessions.map((session) => {
               const isActive = session.id === activeSessionId;
-              const isPinned = Boolean(session.isPinned); // 👈 获取当前置顶状态
+              const isPinned = Boolean(session.isPinned);
 
               return (
                 <div
@@ -177,14 +172,13 @@ function Sidebar({
                     </span>
                   )}
 
-                  {/* 👇 新增：置顶图钉按钮 */}
                   <IconButton
                     size="small"
                     aria-label={isPinned ? "Unpin chat" : "Pin chat"}
                     title={isPinned ? "Unpin chat" : "Pin chat"}
                     disabled={loading}
                     onClick={(event) => {
-                      event.stopPropagation(); // 阻止触发切换会话
+                      event.stopPropagation();
                       onTogglePin?.(session.id, !isPinned);
                     }}
                     sx={{
@@ -202,7 +196,6 @@ function Sidebar({
                     )}
                   </IconButton>
 
-                  {/* 删除按钮 */}
                   <button
                     type="button"
                     aria-label={`Delete ${session.title}`}
@@ -219,22 +212,10 @@ function Sidebar({
           )}
         </div>
 
-        {/* 底部：一键清空 */}
         <div style={styles.footer}>
           <button
             type="button"
-            onClick={() => {
-              if (window.confirm("确定要清空所有聊天记录吗？此操作不可逆。")) {
-                clearChatState()
-                  .then(() => {
-                    localStorage.removeItem("local_ai_chat_sessions_v2");
-                    window.location.reload();
-                  })
-                  .catch((error) => {
-                    console.warn("Could not clear saved chats:", error);
-                  });
-              }
-            }}
+            onClick={onClearAllChats} // 👈 绑定到外部传进来的后端清空接口
             style={{
               background: "none",
               border: "none",
