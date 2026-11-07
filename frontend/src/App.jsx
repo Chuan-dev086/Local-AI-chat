@@ -84,6 +84,17 @@ function createNewSession(mode = "chat") {
   };
 }
 
+// 统一的会话排序函数：先按 isPinned 降序（置顶在前），再按 updatedAt 降序（最近更新在前）
+function sortSessions(sessions) {
+  if (!Array.isArray(sessions)) return [];
+  return [...sessions].sort((a, b) => {
+    if (Boolean(a.isPinned) !== Boolean(b.isPinned)) {
+      return b.isPinned ? 1 : -1; // true 排在前面
+    }
+    return new Date(b.updatedAt) - new Date(a.updatedAt);
+  });
+}
+
 function getTitleFromMessage(message) {
   const title = message.slice(0, 12).trim();
   return title || "New Chat";
@@ -175,6 +186,7 @@ function normalizeSession(raw) {
         ? raw.model
         : DEFAULT_MODELS[mode],
     systemPrompt: typeof raw.systemPrompt === "string" ? raw.systemPrompt : "",
+    isPinned: Boolean(raw.isPinned), // 👈 关键修复：确保清洗数据时保留后端返回的 isPinned 状态
     messages,
     createdAt: typeof raw.createdAt === "string" ? raw.createdAt : now,
     updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : now,
@@ -356,7 +368,7 @@ function App() {
     loadChatState()
       .then((loaded) => {
         if (cancelled) return;
-        setSessions(loaded.state.sessions);
+        setSessions(sortSessions(loaded.state.sessions)); 
         setActiveSessionId(loaded.state.activeSessionId);
         if (loaded.notice) setNotice(loaded.notice);
         persistBlockedRef.current = loaded.persistBlocked;
@@ -496,7 +508,7 @@ function App() {
   const handleNewChat = () => {
     if (loading) return;
     const newSession = createNewSession(activeSession?.mode || "chat");
-    setSessions((prev) => [newSession, ...prev]);
+    setSessions((prev) => sortSessions([newSession, ...prev]));
     setActiveSessionId(newSession.id);
     setInput("");
   };
@@ -537,6 +549,43 @@ function App() {
     if (sessionId === activeSessionId) {
       setActiveSessionId(remainingSessions[0].id);
       setInput("");
+    }
+  };
+
+  // =========================
+  // Pin session handler
+  // =========================
+  const handleTogglePin = async (sessionId, newPinStatus) => {
+    try {
+      const response = await fetch(
+        `http://localhost:5000/api/sessions/${sessionId}/pin`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isPinned: newPinStatus }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to update pin status on server.");
+      }
+
+      // 更新本地 sessions 状态，并严格按照后端规则重新排序：isPinned 降序，updatedAt 降序
+      setSessions((prevSessions) => {
+        const updated = prevSessions.map((s) =>
+          s.id === sessionId ? { ...s, isPinned: newPinStatus } : s,
+        );
+
+        return updated.sort((a, b) => {
+          if (a.isPinned !== b.isPinned) {
+            return b.isPinned ? 1 : -1; // true (pinned) comes first
+          }
+          return new Date(b.updatedAt) - new Date(a.updatedAt);
+        });
+      });
+    } catch (error) {
+      console.error("Failed to toggle pin:", error);
+      setNotice({ severity: "error", message: "Failed to update pin status." });
     }
   };
 
@@ -979,6 +1028,7 @@ function App() {
           onSelectSession={handleSelectSession}
           onDeleteSession={handleDeleteSession}
           onRenameSession={handleRenameSession}
+          onTogglePin={handleTogglePin}
           searchInputRef={searchInputRef}
         />
 

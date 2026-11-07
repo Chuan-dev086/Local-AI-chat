@@ -209,18 +209,16 @@ app.get("/api/models", async (req, res) => {
 // ========================================
 app.get("/api/sessions", async (req, res) => {
   try {
-    // Perform aggregate $lookup to embed messages into each session object
     const sessions = await Session.aggregate([
-      { $sort: { updatedAt: -1 } },
+      { $sort: { isPinned: -1, updatedAt: -1 } },
       {
         $lookup: {
-          from: "messages", // The target MongoDB collection name (lowercase plural of model)
-          localField: "id", // Session schema field (custom string id)
-          foreignField: "sessionId", // Message schema field referencing the session
-          as: "messages", // The resulting array field injected into each session
+          from: "messages",
+          localField: "id",
+          foreignField: "sessionId",
+          as: "messages",
         },
       },
-      // Ensure messages inside each session are sorted chronologically by creation time
       {
         $addFields: {
           messages: {
@@ -237,6 +235,37 @@ app.get("/api/sessions", async (req, res) => {
       error.message,
     );
     res.status(500).json({ error: "Failed to fetch chat sessions." });
+  }
+});
+
+// ========================================
+// Toggle session pin status
+// ========================================
+app.patch("/api/sessions/:id/pin", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isPinned } = req.body;
+
+    if (typeof isPinned !== "boolean") {
+      return res
+        .status(400)
+        .json({ error: "isPinned must be a boolean value." });
+    }
+
+    const updatedSession = await Session.findOneAndUpdate(
+      { id },
+      { $set: { isPinned } },
+      { new: true },
+    );
+
+    if (!updatedSession) {
+      return res.status(404).json({ error: "Session not found." });
+    }
+
+    res.json({ success: true, session: updatedSession });
+  } catch (error) {
+    console.error("[Sessions] Failed to toggle pin status:", error.message);
+    res.status(500).json({ error: "Failed to update pin status." });
   }
 });
 

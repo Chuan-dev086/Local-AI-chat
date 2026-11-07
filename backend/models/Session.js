@@ -8,6 +8,7 @@ const sessionSchema = new mongoose.Schema(
     mode: { type: String, enum: ["chat", "code"], default: "chat" },
     model: { type: String, required: true },
     systemPrompt: { type: String, default: "" },
+    isPinned: { type: Boolean, default: false, index: true }, 
   },
   {
     timestamps: true,

@@ -7,10 +7,11 @@ import {
   InputAdornment,
   Box,
   Typography,
+  IconButton,
 } from "@mui/material";
-import { Search } from "@mui/icons-material";
+import { Search, PushPin, PushPinOutlined } from "@mui/icons-material";
 import { clearChatState } from "../store/chatStorage";
-import { getSidebarStyles, getThemeStyles } from "../theme/theme"; // 👈 引入 getThemeStyles
+import { getSidebarStyles, getThemeStyles } from "../theme/theme";
 
 function Sidebar({
   sessions,
@@ -21,11 +22,12 @@ function Sidebar({
   onNewChat,
   onSelectSession,
   onDeleteSession,
-  onRenameSession, // 👈 新增：接收重命名函数
+  onRenameSession,
+  onTogglePin, // 👈 新增：接收置顶处理函数
   searchInputRef,
 }) {
   const styles = getSidebarStyles(theme, collapsed);
-  const { colors } = getThemeStyles(theme); // 👈 获取颜色配置
+  const { colors } = getThemeStyles(theme);
   const [searchQuery, setSearchQuery] = useState("");
   const [editingSessionId, setEditingSessionId] = useState(null);
   const [editingTitle, setEditingTitle] = useState("");
@@ -44,7 +46,10 @@ function Sidebar({
   const finishRename = (sessionId) => {
     const title = editingTitle.trim();
     setEditingSessionId(null);
-    if (title && title !== sessions.find((session) => session.id === sessionId)?.title) {
+    if (
+      title &&
+      title !== sessions.find((session) => session.id === sessionId)?.title
+    ) {
       onRenameSession?.(sessionId, title);
     }
   };
@@ -109,6 +114,7 @@ function Sidebar({
           ) : (
             filteredSessions.map((session) => {
               const isActive = session.id === activeSessionId;
+              const isPinned = Boolean(session.isPinned); // 👈 获取当前置顶状态
 
               return (
                 <div
@@ -144,10 +150,20 @@ function Sidebar({
                       variant="standard"
                       inputProps={{ "aria-label": `Rename ${session.title}` }}
                       sx={{
-                        flex: 1, minWidth: 0,
+                        flex: 1,
+                        minWidth: 0,
                         "& .MuiInput-root": { height: 24, color: colors.text },
-                        "& .MuiInput-input": { boxSizing: "border-box", height: 24, py: 0, px: 0, fontSize: 14, fontWeight: isActive ? 700 : 500 },
-                        "& .MuiInput-root:before, & .MuiInput-root:after": { display: "none" },
+                        "& .MuiInput-input": {
+                          boxSizing: "border-box",
+                          height: 24,
+                          py: 0,
+                          px: 0,
+                          fontSize: 14,
+                          fontWeight: isActive ? 700 : 500,
+                        },
+                        "& .MuiInput-root:before, & .MuiInput-root:after": {
+                          display: "none",
+                        },
                       }}
                     />
                   ) : (
@@ -161,6 +177,32 @@ function Sidebar({
                     </span>
                   )}
 
+                  {/* 👇 新增：置顶图钉按钮 */}
+                  <IconButton
+                    size="small"
+                    aria-label={isPinned ? "Unpin chat" : "Pin chat"}
+                    title={isPinned ? "Unpin chat" : "Pin chat"}
+                    disabled={loading}
+                    onClick={(event) => {
+                      event.stopPropagation(); // 阻止触发切换会话
+                      onTogglePin?.(session.id, !isPinned);
+                    }}
+                    sx={{
+                      color: isPinned
+                        ? colors.buttonBg || "#4f46e5"
+                        : colors.textMuted,
+                      padding: "4px",
+                      "&:hover": { color: colors.text },
+                    }}
+                  >
+                    {isPinned ? (
+                      <PushPin fontSize="small" />
+                    ) : (
+                      <PushPinOutlined fontSize="small" />
+                    )}
+                  </IconButton>
+
+                  {/* 删除按钮 */}
                   <button
                     type="button"
                     aria-label={`Delete ${session.title}`}
@@ -183,12 +225,14 @@ function Sidebar({
             type="button"
             onClick={() => {
               if (window.confirm("确定要清空所有聊天记录吗？此操作不可逆。")) {
-                clearChatState().then(() => {
-                  localStorage.removeItem("local_ai_chat_sessions_v2");
-                  window.location.reload();
-                }).catch((error) => {
-                  console.warn("Could not clear saved chats:", error);
-                });
+                clearChatState()
+                  .then(() => {
+                    localStorage.removeItem("local_ai_chat_sessions_v2");
+                    window.location.reload();
+                  })
+                  .catch((error) => {
+                    console.warn("Could not clear saved chats:", error);
+                  });
               }
             }}
             style={{
