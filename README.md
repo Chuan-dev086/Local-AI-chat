@@ -66,7 +66,7 @@ No OpenAI, Gemini, or Claude API keys. No cloud database. Everything runs on you
 
 - **MongoDB Persistence**: Chats and messages are securely stored in a local MongoDB database, resolving browser storage capacity limits.
 - **Reference Data Model**: Messages are separated into an independent collection from Sessions, linked via a custom string ID, and assembled via MongoDB `$lookup` aggregation.
-- **Session search**: Search chat titles and message content (`Ctrl/Cmd + K`).
+- **Session search**: Search chat titles (`Ctrl/Cmd + K`).
 - **Markdown export**: Download any conversation as a `.md` file.
 
 ---
