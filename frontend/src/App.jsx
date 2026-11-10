@@ -12,6 +12,7 @@ import RenameDialog from "./components/RenameDialog";
 import PromptManagerDialog from "./components/PromptManagerDialog";
 import { getThemeStyles } from "./theme/theme";
 import {
+  API_BASE,
   ChatApiError,
   clearChat,
   fetchModels,
@@ -208,7 +209,7 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("http://localhost:5000/api/sessions")
+    fetch(`${API_BASE}/sessions`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to fetch sessions from server.");
         return res.json();
@@ -226,7 +227,7 @@ function App() {
           const defaultSession = createNewSession();
           setSessions([defaultSession]);
           setActiveSessionId(defaultSession.id);
-          fetch("http://localhost:5000/api/sessions", {
+          fetch(`${API_BASE}/sessions`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(defaultSession),
@@ -342,7 +343,7 @@ function App() {
     const newSession = createNewSession(activeSession?.mode || "chat");
 
     try {
-      await fetch("http://localhost:5000/api/sessions", {
+      await fetch(`${API_BASE}/sessions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newSession),
@@ -365,7 +366,7 @@ function App() {
   const handleRenameSession = async (sessionId, title) => {
     if (loading) return;
     try {
-      await fetch(`http://localhost:5000/api/sessions/${sessionId}`, {
+      await fetch(`${API_BASE}/sessions/${sessionId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title }),
@@ -390,7 +391,7 @@ function App() {
       return;
 
     try {
-      await fetch(`http://localhost:5000/api/sessions/${sessionId}`, {
+      await fetch(`${API_BASE}/sessions/${sessionId}`, {
         method: "DELETE",
       });
     } catch (error) {
@@ -403,7 +404,7 @@ function App() {
       setSessions([newSession]);
       setActiveSessionId(newSession.id);
       setInput("");
-      fetch("http://localhost:5000/api/sessions", {
+      fetch(`${API_BASE}/sessions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newSession),
@@ -420,14 +421,11 @@ function App() {
 
   const handleTogglePin = async (sessionId, newPinStatus) => {
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/sessions/${sessionId}/pin`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ isPinned: newPinStatus }),
-        },
-      );
+      const response = await fetch(`${API_BASE}/sessions/${sessionId}/pin`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isPinned: newPinStatus }),
+      });
 
       if (!response.ok) throw new Error("Failed to update pin status.");
 
@@ -458,13 +456,13 @@ function App() {
     if (!window.confirm("确定要清空所有聊天记录吗？此操作不可逆。")) return;
 
     try {
-      const res = await fetch("http://localhost:5000/api/sessions", {
+      const res = await fetch(`${API_BASE}/sessions`, {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Failed to clear sessions.");
 
       const freshSession = createNewSession();
-      await fetch("http://localhost:5000/api/sessions", {
+      await fetch(`${API_BASE}/sessions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(freshSession),
@@ -488,12 +486,12 @@ function App() {
     const sessionId = activeSession.id;
     try {
       await clearChat(sessionId);
-      await fetch(`http://localhost:5000/api/sessions/${sessionId}`, {
+      await fetch(`${API_BASE}/sessions/${sessionId}`, {
         method: "DELETE",
       });
       const freshSession = createNewSession(activeSession.mode);
       freshSession.id = sessionId;
-      await fetch("http://localhost:5000/api/sessions", {
+      await fetch(`${API_BASE}/sessions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(freshSession),
@@ -527,7 +525,7 @@ function App() {
       : activeSession.model;
 
     try {
-      await fetch(`http://localhost:5000/api/sessions/${activeSession.id}`, {
+      await fetch(`${API_BASE}/sessions/${activeSession.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode: newMode, model: newModel }),
@@ -548,7 +546,7 @@ function App() {
     const newModel = event.target.value;
 
     try {
-      await fetch(`http://localhost:5000/api/sessions/${activeSession.id}`, {
+      await fetch(`${API_BASE}/sessions/${activeSession.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: newModel }),

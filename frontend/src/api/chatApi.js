@@ -1,7 +1,7 @@
 // src/api/chatApi.js
 
 // 可通过 frontend/.env.local 中的 VITE_API_BASE 覆盖，例如 VITE_API_BASE=http://localhost:5000/api
-const API_BASE =
+export const API_BASE =
   import.meta.env.VITE_API_BASE?.trim() || "http://localhost:5000/api";
 const CHAT_URL = `${API_BASE}/chat`;
 const CLEAR_CHAT_URL = `${CHAT_URL}/clear`;
@@ -135,7 +135,7 @@ export async function fetchModels({ signal } = {}) {
 // Context Window & Token Truncation Helper
 // ========================================
 
-const MAX_SAFE_CONTEXT_CHARS = 100;
+const MAX_SAFE_CONTEXT_CHARS = 8000; // 8k characters, ~2k tokens
 
 /**
  * Truncate message history to fit within safe character limits and ensure
