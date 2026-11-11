@@ -18,6 +18,7 @@ import {
   fetchModels,
   isAbortError,
   streamChat,
+  syncSessionMessages,
 } from "./api/chatApi";
 import { useCustomPrompts } from "./hooks/useCustomPrompts";
 
@@ -30,7 +31,7 @@ const SHOW_SCROLL_BUTTON_PX = 300;
 
 const DEFAULT_MODELS = {
   chat: "llama3.2:3b",
-  code: "qwen3:4b-instruct-2507-q4_K_M", 
+  code: "qwen3:4b-instruct-2507-q4_K_M",
 };
 
 function randomSuffix() {
@@ -283,6 +284,16 @@ function App() {
       // Ignore
     }
   }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    if (!loading) return;
+    const handler = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [loading]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -606,21 +617,37 @@ function App() {
 
     const assistantId = createMessageId();
     const timestamp = nowIso();
+    const assistantPlaceholder = {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      createdAt: timestamp,
+    };
+
+    // 前端持久化的"真相"数组：Stop / 出错时都会移除 assistant
+    let finalMessages = [...baseMessages, userMessage, assistantPlaceholder];
+
+    // 👈 恢复：把 title / model fallback 持久化到后端
+    const metaPatch = {};
+    if (sessionPatch.title && baseMessages.length === 0) {
+      metaPatch.title = sessionPatch.title;
+    }
+    if (sessionPatch.model) {
+      metaPatch.model = sessionPatch.model;
+    }
+    if (Object.keys(metaPatch).length > 0) {
+      fetch(`${API_BASE}/sessions/${sessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(metaPatch),
+      }).catch((err) => console.error("Failed to persist session meta:", err));
+    }
 
     setLoading(true);
     patchSession(sessionId, (session) => ({
       ...session,
       ...sessionPatch,
-      messages: [
-        ...baseMessages,
-        userMessage,
-        {
-          id: assistantId,
-          role: "assistant",
-          content: "",
-          createdAt: timestamp,
-        },
-      ],
+      messages: finalMessages,
       updatedAt: timestamp,
     }));
 
@@ -639,6 +666,9 @@ function App() {
         ...message,
         content: message.content + text,
       }));
+      finalMessages = finalMessages.map((m) =>
+        m.id === assistantId ? { ...m, content: m.content + text } : m,
+      );
     };
 
     const scheduleFlush = () => {
@@ -665,30 +695,45 @@ function App() {
       });
       flushPending();
     } catch (error) {
+      // 1. 无论发生什么，先把缓存里还没刷新的字刷进去
       flushPending();
 
       if (isAbortError(error) || controller.signal.aborted) {
+        // 2. 如果是用户主动 Stop
+        // 检查有没有生成任何内容，如果完全空白，才清掉 UI
+        const currentAssistant = finalMessages.find(
+          (m) => m.id === assistantId,
+        );
+        if (!currentAssistant || !currentAssistant.content.trim()) {
+          finalMessages = finalMessages.filter((m) => m.id !== assistantId);
+          patchSession(sessionId, (session) => ({
+            ...session,
+            messages: session.messages.filter((m) => m.id !== assistantId),
+          }));
+        }
+        // 如果已经有内容，就保留（不再删除）
+      } else {
+        // 3. 如果是真错误：UI 里移除 assistant，顶部 Alert 提示
+        finalMessages = finalMessages.filter((m) => m.id !== assistantId);
         patchSession(sessionId, (session) => ({
           ...session,
-          messages: session.messages.filter(
-            (message) => !(message.id === assistantId && !message.content),
-          ),
+          messages: session.messages.filter((m) => m.id !== assistantId),
         }));
-      } else {
+
         console.error("Chat request failed:", error);
         const errorText =
           error instanceof ChatApiError
             ? error.message
             : "发生未知错误，请查看控制台。";
-
-        patchMessage(sessionId, assistantId, (message) => ({
-          ...message,
-          content: message.content
-            ? `${message.content}\n\n**Error:** ${errorText}`
-            : `**Error:** ${errorText}`,
-        }));
+        setNotice({ severity: "error", message: errorText });
       }
     } finally {
+      // 4. 无论成功、Stop、还是出错，最终都同步给后端
+      // 注意：如果是 Stop 且完全没生成内容，finalMessages 里没有 assistant，后端接口也会自动过滤掉
+      syncSessionMessages(sessionId, finalMessages).catch((err) =>
+        console.error("Failed to sync messages:", err),
+      );
+
       if (abortRef.current === controller) {
         abortRef.current = null;
       }
