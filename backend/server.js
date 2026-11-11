@@ -27,7 +27,7 @@ const CORS_ORIGINS = (
 // 用户没主动选模型时，各模式的默认值
 const DEFAULT_MODELS = {
   chat: process.env.DEFAULT_CHAT_MODEL || "llama3.2:3b",
-  code: process.env.DEFAULT_CODE_MODEL || "qwen2.5-coder:3b",
+  code: process.env.DEFAULT_CODE_MODEL || "qwen3:4b-instruct-2507-q4_K_M",
 };
 
 // Maximum number of previous messages sent to Ollama
@@ -37,7 +37,7 @@ const MAX_CONTEXT_MESSAGES = Number(process.env.MAX_CONTEXT_MESSAGES) || 10;
 const MAX_OUTPUT_TOKENS = Number(process.env.MAX_OUTPUT_TOKENS) || 1024;
 
 // Context window passed to Ollama (prompt + history + output must fit)
-const NUM_CTX = Number(process.env.NUM_CTX) || 8192;
+const NUM_CTX = Number(process.env.NUM_CTX) || 4096;
 
 // Maximum length of a custom system prompt
 const MAX_SYSTEM_PROMPT_LENGTH =
@@ -565,7 +565,8 @@ app.post("/api/chat", async (req, res) => {
         stream: true,
         options: {
           num_predict: MAX_OUTPUT_TOKENS,
-          num_ctx: NUM_CTX,
+          num_ctx: 2048,
+          num_batch: 128,
         },
       },
       {

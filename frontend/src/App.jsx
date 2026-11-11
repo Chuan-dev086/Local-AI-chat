@@ -30,7 +30,7 @@ const SHOW_SCROLL_BUTTON_PX = 300;
 
 const DEFAULT_MODELS = {
   chat: "llama3.2:3b",
-  code: "qwen2.5-coder:3b",
+  code: "qwen3:4b-instruct-2507-q4_K_M", 
 };
 
 function randomSuffix() {
