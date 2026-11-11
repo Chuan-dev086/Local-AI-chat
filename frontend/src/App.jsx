@@ -1,14 +1,12 @@
 // src/App.jsx
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "@mui/material";
-
+import { Alert, ThemeProvider, createTheme } from "@mui/material";
 import Sidebar from "./components/Sidebar";
 import ChatHeader from "./components/ChatHeader";
 import MessageList from "./components/MessageList";
 import ChatInput from "./components/ChatInput";
 import SystemPromptDialog from "./components/SystemPromptDialog";
-import RenameDialog from "./components/RenameDialog";
 import PromptManagerDialog from "./components/PromptManagerDialog";
 import { getThemeStyles } from "./theme/theme";
 import {
@@ -200,7 +198,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [models, setModels] = useState([]);
   const [isSystemPromptOpen, setIsSystemPromptOpen] = useState(false);
-  const [isRenameOpen, setIsRenameOpen] = useState(false);
+  const [isRenaming, setIsRenaming] = useState(false);
   const [isPromptManagerOpen, setIsPromptManagerOpen] = useState(false);
   const [attachedFile, setAttachedFile] = useState(null);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
@@ -262,6 +260,18 @@ function App() {
   const searchInputRef = useRef(null);
 
   const themeStyles = getThemeStyles(theme);
+
+  // 👈 全局生成 MUI 主题
+  const muiTheme = useMemo(
+    () =>
+      createTheme({
+        palette: {
+          mode: theme === "dark" ? "dark" : "light",
+          primary: { main: "#4f46e5" },
+        },
+      }),
+    [theme],
+  );
 
   const activeSession = useMemo(
     () =>
@@ -454,11 +464,7 @@ function App() {
 
   const handleOpenRename = () => {
     if (loading || !activeSession) return;
-    setIsRenameOpen(true);
-  };
-
-  const handleSaveRename = (newTitle) => {
-    handleRenameSession(activeSession.id, newTitle);
+    setIsRenaming(true); // 👈 直接触发原地编辑
   };
 
   // 👈 修复 2：Clear all chats 接入后端 DELETE /api/sessions 接口
@@ -944,146 +950,142 @@ function App() {
   }
 
   return (
-    <main style={themeStyles.page}>
-      <section style={themeStyles.container}>
-        <Sidebar
-          sessions={sessions}
-          activeSessionId={activeSessionId}
-          loading={loading}
-          theme={theme}
-          collapsed={sidebarCollapsed}
-          onNewChat={handleNewChat}
-          onSelectSession={handleSelectSession}
-          onDeleteSession={handleDeleteSession}
-          onRenameSession={handleRenameSession}
-          onTogglePin={handleTogglePin}
-          onClearAllChats={handleClearAllChats} // 👈 传入清空所有会话的回调
-          searchInputRef={searchInputRef}
-        />
-
-        <div style={themeStyles.mainContent}>
-          {notice && (
-            <Alert
-              severity={notice.severity}
-              onClose={() => setNotice(null)}
-              sx={{ m: 1, mb: 0 }}
-            >
-              {notice.message}
-            </Alert>
-          )}
-
-          <ChatHeader
-            activeSession={activeSession}
+    <ThemeProvider theme={muiTheme}>
+      <main style={themeStyles.page}>
+        <section style={themeStyles.container}>
+          <Sidebar
+            sessions={sessions}
+            activeSessionId={activeSessionId}
             loading={loading}
             theme={theme}
-            models={models}
-            onToggleSidebar={toggleSidebar}
-            onModeChange={handleModeChange}
-            onModelChange={handleModelChange}
-            onRenameSession={handleOpenRename}
-            onToggleTheme={toggleTheme}
-            onOpenSystemPrompt={handleOpenSystemPrompt}
-            onClearChat={handleClearChat}
+            collapsed={sidebarCollapsed}
+            onNewChat={handleNewChat}
+            onSelectSession={handleSelectSession}
+            onDeleteSession={handleDeleteSession}
+            onRenameSession={handleRenameSession}
+            onTogglePin={handleTogglePin}
+            onClearAllChats={handleClearAllChats} // 👈 传入清空所有会话的回调
+            searchInputRef={searchInputRef}
           />
 
-          <div
-            ref={messagesAreaRef}
-            style={themeStyles.messagesArea}
-            id="chat-scroll-container"
-            onScroll={handleMessagesScroll}
-          >
-            <div style={themeStyles.messagesInner}>
-              <MessageList
-                activeSession={activeSession}
-                loading={loading}
-                chatEndRef={chatEndRef}
-                theme={theme}
-                onEditMessage={handleEditMessage}
-                onRegenerate={handleRegenerate}
-              />
-            </div>
-          </div>
+          <div style={themeStyles.mainContent}>
+            {notice && (
+              <Alert
+                severity={notice.severity}
+                onClose={() => setNotice(null)}
+                sx={{ m: 1, mb: 0 }}
+              >
+                {notice.message}
+              </Alert>
+            )}
 
-          {showScrollBottom && (
-            <button
-              type="button"
-              onClick={scrollToBottom}
-              style={{
-                position: "absolute",
-                bottom: "120px",
-                right: "calc(50% - 410px)",
-                width: 36,
-                height: 36,
-                borderRadius: "50%",
-                backgroundColor: themeStyles.colors?.containerBg || "#fff",
-                border: `1px solid ${themeStyles.colors?.border || "#cbd5e1"}`,
-                color: themeStyles.colors?.text || "#000",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                zIndex: 10,
-                transition: "all 0.2s ease",
-              }}
-              title="Scroll to bottom"
+            <ChatHeader
+              activeSession={activeSession}
+              loading={loading}
+              theme={theme}
+              onToggleSidebar={toggleSidebar}
+              onRenameSession={handleRenameSession}
+              onToggleTheme={toggleTheme}
+              isRenaming={isRenaming}
+              setIsRenaming={setIsRenaming}
+            />
+
+            <div
+              ref={messagesAreaRef}
+              style={themeStyles.messagesArea}
+              id="chat-scroll-container"
+              onScroll={handleMessagesScroll}
             >
-              <span style={{ fontSize: "18px", fontWeight: "bold" }}>↓</span>
-            </button>
-          )}
+              <div style={themeStyles.messagesInner}>
+                <MessageList
+                  activeSession={activeSession}
+                  loading={loading}
+                  chatEndRef={chatEndRef}
+                  theme={theme}
+                  onEditMessage={handleEditMessage}
+                  onRegenerate={handleRegenerate}
+                />
+              </div>
+            </div>
 
-          <div style={themeStyles.inputArea}>
-            <div style={themeStyles.inputInner}>
-              <ChatInput
-                input={input}
-                loading={loading}
-                activeSession={activeSession}
-                theme={theme}
-                attachedFile={attachedFile}
-                customPrompts={customPrompts}
-                onAttachFile={setAttachedFile}
-                onRemoveFile={() => setAttachedFile(null)}
-                onInputChange={setInput}
-                onSendMessage={handleSendMessage}
-                onStop={handleStop}
-                onSelectPromptTemplate={handleSelectPromptTemplate}
-                onOpenPromptManager={() => setIsPromptManagerOpen(true)}
-              />
+            {showScrollBottom && (
+              <button
+                type="button"
+                onClick={scrollToBottom}
+                style={{
+                  position: "absolute",
+                  bottom: "120px",
+                  right: "calc(50% - 410px)",
+                  width: 36,
+                  height: 36,
+                  borderRadius: "50%",
+                  backgroundColor: themeStyles.colors?.containerBg || "#fff",
+                  border: `1px solid ${themeStyles.colors?.border || "#cbd5e1"}`,
+                  color: themeStyles.colors?.text || "#000",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  zIndex: 10,
+                  transition: "all 0.2s ease",
+                }}
+                title="Scroll to bottom"
+              >
+                <span style={{ fontSize: "18px", fontWeight: "bold" }}>↓</span>
+              </button>
+            )}
+
+            <div style={themeStyles.inputArea}>
+              <div style={themeStyles.inputInner}>
+                <ChatInput
+                  input={input}
+                  loading={loading}
+                  activeSession={activeSession}
+                  theme={theme}
+                  attachedFile={attachedFile}
+                  models={models}
+                  customPrompts={customPrompts}
+                  onAttachFile={setAttachedFile}
+                  onRemoveFile={() => setAttachedFile(null)}
+                  onInputChange={setInput}
+                  onSendMessage={handleSendMessage}
+                  onStop={handleStop}
+                  onModelChange={handleModelChange}
+                  onModeChange={handleModeChange}
+                  onRenameSession={handleOpenRename}
+                  onOpenSystemPrompt={handleOpenSystemPrompt}
+                  onClearChat={handleClearChat}
+                  onSelectPromptTemplate={handleSelectPromptTemplate}
+                  onOpenPromptManager={() => setIsPromptManagerOpen(true)}
+                />
+              </div>
             </div>
           </div>
-        </div>
 
-        <SystemPromptDialog
-          key={`system-prompt-${activeSession?.id}-${isSystemPromptOpen ? "open" : "closed"}`}
-          open={isSystemPromptOpen}
-          initialValue={activeSession?.systemPrompt || ""}
-          mode={activeSession?.mode || "chat"}
-          theme={theme}
-          onClose={handleCloseSystemPrompt}
-          onSave={handleSaveSystemPrompt}
-          onSaveAsTemplate={addPrompt}
-        />
+          <SystemPromptDialog
+            key={`system-prompt-${activeSession?.id}-${isSystemPromptOpen ? "open" : "closed"}`}
+            open={isSystemPromptOpen}
+            initialValue={activeSession?.systemPrompt || ""}
+            mode={activeSession?.mode || "chat"}
+            theme={theme}
+            onClose={handleCloseSystemPrompt}
+            onSave={handleSaveSystemPrompt}
+            onSaveAsTemplate={addPrompt}
+          />
 
-        <RenameDialog
-          key={`rename-${activeSession?.id}-${isRenameOpen ? "open" : "closed"}`}
-          open={isRenameOpen}
-          initialTitle={activeSession?.title || ""}
-          theme={theme}
-          onClose={() => setIsRenameOpen(false)}
-          onSave={handleSaveRename}
-        />
-
-        <PromptManagerDialog
-          open={isPromptManagerOpen}
-          theme={theme}
-          customPrompts={customPrompts}
-          onAdd={addPrompt}
-          onUpdate={updatePrompt}
-          onDelete={deletePrompt}
-          onClose={() => setIsPromptManagerOpen(false)}
-        />
-      </section>
-    </main>
+          <PromptManagerDialog
+            open={isPromptManagerOpen}
+            theme={theme}
+            customPrompts={customPrompts}
+            onAdd={addPrompt}
+            onUpdate={updatePrompt}
+            onDelete={deletePrompt}
+            onClose={() => setIsPromptManagerOpen(false)}
+          />
+        </section>
+      </main>
+    </ThemeProvider>
   );
 }
 
