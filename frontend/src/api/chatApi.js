@@ -50,6 +50,27 @@ export async function clearChat(sessionId) {
   return response.json();
 }
 
+export async function syncSessionMessages(sessionId, messages) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/sessions/${sessionId}/messages`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages }),
+    });
+  } catch (error) {
+    throw new ChatApiError("无法连接到后端，消息未能保存。", { cause: error });
+  }
+
+  if (!response.ok) {
+    throw new ChatApiError(await readErrorMessage(response), {
+      status: response.status,
+    });
+  }
+
+  return response.json();
+}
+
 // 读取 HTTP 错误响应中的错误信息，解析失败时使用通用提示
 async function readErrorMessage(response) {
   const fallback = `后端请求失败（HTTP ${response.status}）。`;
