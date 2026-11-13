@@ -12,13 +12,20 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@qdrant/js-client-rest": "^1.18.0",
     "axios": "^1.20.0",
     "cors": "^2.8.6",
     "dotenv": "^18.0.8",
     "express": "^5.2.1",
-    "mongoose": "^9.12.0"
+    "mongoose": "^9.12.0",
+    "pdf-parse": "^2.4.5",
+    "undici": "^8.12.4",
+    "uuid": "^14.0.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
+  },
+  "overrides": {
+    "undici": "$undici"
   }
 }

@@ -3,3 +3,9 @@ node_modules/
 .env.*
 !.env.example
 dist/
+# Qdrant Docker Data
+qdrant_storage/
+
+# Test files
+test.pdf
+backend/test.pdf
