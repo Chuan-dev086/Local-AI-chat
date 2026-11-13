@@ -83,10 +83,8 @@ function MessageBubble({
 
   return (
     <div
-      style={{
-        ...styles.container,
-        animation: "fadeInUp 0.3s ease-out both",
-      }}
+      id={`msg-${message.id}`}
+      style={{ ...styles.container, animation: "fadeInUp 0.3s ease-out both" }}
     >
       <div
         style={{
@@ -157,7 +155,13 @@ function MessageBubble({
                   <img
                     src={`data:${message.mimeType || "image/jpeg"};base64,${message.imageBase64}`}
                     alt={message.file || "Uploaded image"}
-                    style={{ display: "block", maxWidth: "min(320px, 100%)", maxHeight: 240, borderRadius: 10, objectFit: "contain" }}
+                    style={{
+                      display: "block",
+                      maxWidth: "min(320px, 100%)",
+                      maxHeight: 240,
+                      borderRadius: 10,
+                      objectFit: "contain",
+                    }}
                   />
                 </div>
               )}

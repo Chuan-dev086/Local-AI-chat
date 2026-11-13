@@ -205,6 +205,7 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     getInitialSidebarCollapsed,
   );
+  const [scrollToMessageId, setScrollToMessageId] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -332,6 +333,26 @@ function App() {
     });
   }, [activeSession?.messages, loading]);
 
+  useEffect(() => {
+    if (!scrollToMessageId) return;
+    // 等待 DOM 渲染完毕后滚动
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`msg-${scrollToMessageId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        // 添加一个闪烁的背景效果
+        el.style.transition = "background-color 0.3s ease";
+        el.style.backgroundColor = "rgba(79, 70, 229, 0.15)";
+        el.style.borderRadius = "8px";
+        setTimeout(() => {
+          el.style.backgroundColor = "transparent";
+        }, 2000);
+      }
+      setScrollToMessageId(null);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [scrollToMessageId, activeSessionId]);
+
   const patchSession = (sessionId, updater) => {
     setSessions((prevSessions) =>
       sortSessions(
@@ -378,10 +399,13 @@ function App() {
     setInput("");
   };
 
-  const handleSelectSession = (sessionId) => {
+  const handleSelectSession = (sessionId, messageId = null) => {
     if (loading) return;
     setActiveSessionId(sessionId);
     setInput("");
+    if (messageId) {
+      setScrollToMessageId(messageId);
+    }
   };
 
   const handleRenameSession = async (sessionId, title) => {

@@ -1,6 +1,6 @@
 // src/components/Sidebar.jsx
 
-import { useRef, useState } from "react";
+import { useRef, useState, useMemo } from "react";
 import {
   Button,
   TextField,
@@ -11,6 +11,39 @@ import {
 } from "@mui/material";
 import { Search, PushPin, PushPinOutlined } from "@mui/icons-material";
 import { getSidebarStyles, getThemeStyles } from "../theme/theme";
+
+// 辅助函数：转义正则特殊字符，防止搜索时输入特殊符号导致报错
+const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// 高亮组件
+const HighlightText = ({ text, highlight, isDark }) => {
+  if (!highlight.trim()) return <span>{text}</span>;
+
+  const regex = new RegExp(`(${escapeRegExp(highlight)})`, "gi");
+  const parts = text.split(regex);
+
+  return (
+    <span>
+      {parts.map((part, i) =>
+        part.toLowerCase() === highlight.toLowerCase() ? (
+          <span
+            key={i}
+            style={{
+              backgroundColor: isDark ? "#854d0e" : "#fef08a",
+              color: isDark ? "#fef08a" : "#854d0e",
+              borderRadius: 2,
+              padding: "0 2px",
+            }}
+          >
+            {part}
+          </span>
+        ) : (
+          part
+        ),
+      )}
+    </span>
+  );
+};
 
 function Sidebar({
   sessions,
@@ -23,11 +56,12 @@ function Sidebar({
   onDeleteSession,
   onRenameSession,
   onTogglePin,
-  onClearAllChats, // 👈 接收清空所有会话的回调
+  onClearAllChats,
   searchInputRef,
 }) {
   const styles = getSidebarStyles(theme, collapsed);
-  const { colors } = getThemeStyles(theme);
+  const { colors, isDark } = getThemeStyles(theme); // 确保拿到 isDark 用于高亮颜色
+
   const [searchQuery, setSearchQuery] = useState("");
   const [editingSessionId, setEditingSessionId] = useState(null);
   const [editingTitle, setEditingTitle] = useState("");
@@ -54,12 +88,30 @@ function Sidebar({
     }
   };
 
-  // 👈 修复 3：只根据 session.title 进行搜索，删掉 messages 匹配逻辑
-  const filteredSessions = sessions.filter((session) => {
-    if (!searchQuery.trim()) return true;
-    const query = searchQuery.toLowerCase();
-    return session.title.toLowerCase().includes(query);
-  });
+  // 核心搜索逻辑：匹配标题和消息内容
+  const filteredSessions = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      return sessions.map((s) => ({ ...s, matchedMessages: [] }));
+    }
+
+    return sessions
+      .map((session) => {
+        const titleMatch = session.title.toLowerCase().includes(query);
+
+        // 找到包含关键词的消息（最多取前3条用于展示摘要）
+        const matchedMessages = session.messages
+          .filter((m) => m.content.toLowerCase().includes(query))
+          .slice(0, 3);
+
+        // 只要标题匹配或消息内容匹配，就保留该会话
+        if (titleMatch || matchedMessages.length > 0) {
+          return { ...session, matchedMessages };
+        }
+        return null;
+      })
+      .filter(Boolean);
+  }, [sessions, searchQuery]);
 
   return (
     <aside style={styles.aside}>
@@ -81,7 +133,7 @@ function Sidebar({
           <Box sx={{ mt: 2 }}>
             <TextField
               inputRef={searchInputRef}
-              placeholder="Search chats..."
+              placeholder="Search chats & messages..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               size="small"
@@ -104,7 +156,7 @@ function Sidebar({
         <div style={styles.list}>
           {filteredSessions.length === 0 ? (
             <Box sx={{ p: 2, textAlign: "center", color: "text.secondary" }}>
-              <Typography variant="body2">No chats found.</Typography>
+              <Typography variant="body2">No results found.</Typography>
             </Box>
           ) : (
             filteredSessions.map((session) => {
@@ -112,100 +164,182 @@ function Sidebar({
               const isPinned = Boolean(session.isPinned);
 
               return (
-                <div
-                  key={session.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onSelectSession(session.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      onSelectSession(session.id);
-                    }
-                  }}
-                  style={styles.sessionItem(isActive, loading)}
-                >
-                  {editingSessionId === session.id ? (
-                    <TextField
-                      inputRef={renameInputRef}
-                      value={editingTitle}
-                      onChange={(event) => setEditingTitle(event.target.value)}
-                      onClick={(event) => event.stopPropagation()}
-                      onDoubleClick={(event) => event.stopPropagation()}
-                      onBlur={() => finishRename(session.id)}
-                      onKeyDown={(event) => {
-                        event.stopPropagation();
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          finishRename(session.id);
-                        } else if (event.key === "Escape") {
-                          setEditingSessionId(null);
+                <div key={session.id} style={{ marginBottom: 6 }}>
+                  {/* 主会话条目 */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onSelectSession(session.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        onSelectSession(session.id);
+                      }
+                    }}
+                    style={styles.sessionItem(isActive, loading)}
+                  >
+                    {editingSessionId === session.id ? (
+                      <TextField
+                        inputRef={renameInputRef}
+                        value={editingTitle}
+                        onChange={(event) =>
+                          setEditingTitle(event.target.value)
                         }
-                      }}
-                      size="small"
-                      variant="standard"
-                      inputProps={{ "aria-label": `Rename ${session.title}` }}
-                      sx={{
-                        flex: 1,
-                        minWidth: 0,
-                        "& .MuiInput-root": { height: 24, color: colors.text },
-                        "& .MuiInput-input": {
-                          boxSizing: "border-box",
-                          height: 24,
-                          py: 0,
-                          px: 0,
-                          fontSize: 14,
-                          fontWeight: isActive ? 700 : 500,
-                        },
-                        "& .MuiInput-root:before, & .MuiInput-root:after": {
-                          display: "none",
-                        },
-                      }}
-                    />
-                  ) : (
-                    <span
-                      title={session.title}
-                      style={styles.sessionTitle(isActive)}
-                      onDoubleClick={(event) => startRename(event, session)}
-                    >
-                      {session.mode === "code" ? "\u{1F4BB} " : "\u{1F4AC} "}
-                      {session.title}
-                    </span>
-                  )}
-
-                  <IconButton
-                    size="small"
-                    aria-label={isPinned ? "Unpin chat" : "Pin chat"}
-                    title={isPinned ? "Unpin chat" : "Pin chat"}
-                    disabled={loading}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onTogglePin?.(session.id, !isPinned);
-                    }}
-                    sx={{
-                      color: isPinned
-                        ? colors.buttonBg || "#4f46e5"
-                        : colors.textMuted,
-                      padding: "4px",
-                      "&:hover": { color: colors.text },
-                    }}
-                  >
-                    {isPinned ? (
-                      <PushPin fontSize="small" />
+                        onClick={(event) => event.stopPropagation()}
+                        onDoubleClick={(event) => event.stopPropagation()}
+                        onBlur={() => finishRename(session.id)}
+                        onKeyDown={(event) => {
+                          event.stopPropagation();
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            finishRename(session.id);
+                          } else if (event.key === "Escape") {
+                            setEditingSessionId(null);
+                          }
+                        }}
+                        size="small"
+                        variant="standard"
+                        inputProps={{ "aria-label": `Rename ${session.title}` }}
+                        sx={{
+                          flex: 1,
+                          minWidth: 0,
+                          "& .MuiInput-root": {
+                            height: 24,
+                            color: colors.text,
+                          },
+                          "& .MuiInput-input": {
+                            boxSizing: "border-box",
+                            height: 24,
+                            py: 0,
+                            px: 0,
+                            fontSize: 14,
+                            fontWeight: isActive ? 700 : 500,
+                          },
+                          "& .MuiInput-root:before, & .MuiInput-root:after": {
+                            display: "none",
+                          },
+                        }}
+                      />
                     ) : (
-                      <PushPinOutlined fontSize="small" />
+                      <span
+                        title={session.title}
+                        style={styles.sessionTitle(isActive)}
+                        onDoubleClick={(event) => startRename(event, session)}
+                      >
+                        {session.mode === "code" ? "💻 " : "💬 "}
+                        <HighlightText
+                          text={session.title}
+                          highlight={searchQuery}
+                          isDark={isDark}
+                        />
+                      </span>
                     )}
-                  </IconButton>
 
-                  <button
-                    type="button"
-                    aria-label={`Delete ${session.title}`}
-                    title="Delete chat"
-                    onClick={(event) => onDeleteSession(event, session.id)}
-                    disabled={loading}
-                    style={styles.deleteBtn(loading)}
-                  >
-                    ×
-                  </button>
+                    <IconButton
+                      size="small"
+                      aria-label={isPinned ? "Unpin chat" : "Pin chat"}
+                      title={isPinned ? "Unpin chat" : "Pin chat"}
+                      disabled={loading}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onTogglePin?.(session.id, !isPinned);
+                      }}
+                      sx={{
+                        color: isPinned
+                          ? colors.buttonBg || "#4f46e5"
+                          : colors.textMuted,
+                        padding: "4px",
+                        "&:hover": { color: colors.text },
+                      }}
+                    >
+                      {isPinned ? (
+                        <PushPin fontSize="small" />
+                      ) : (
+                        <PushPinOutlined fontSize="small" />
+                      )}
+                    </IconButton>
+
+                    <button
+                      type="button"
+                      aria-label={`Delete ${session.title}`}
+                      title="Delete chat"
+                      onClick={(event) => onDeleteSession(event, session.id)}
+                      disabled={loading}
+                      style={styles.deleteBtn(loading)}
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  {/* 匹配的消息摘要列表 */}
+                  {session.matchedMessages.length > 0 && (
+                    <div
+                      style={{
+                        paddingLeft: 24,
+                        paddingRight: 8,
+                        marginTop: 4,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 4,
+                      }}
+                    >
+                      {session.matchedMessages.map((msg) => {
+                        // 截取匹配词前后的片段（+/- 15~25个字符）
+                        const idx = msg.content
+                          .toLowerCase()
+                          .indexOf(searchQuery.toLowerCase());
+                        const start = Math.max(0, idx - 15);
+                        const end = Math.min(
+                          msg.content.length,
+                          idx + searchQuery.length + 25,
+                        );
+                        const snippet =
+                          (start > 0 ? "..." : "") +
+                          msg.content.slice(start, end).replace(/\n/g, " ") + // 换行替换成空格，防止摘要过高
+                          (end < msg.content.length ? "..." : "");
+
+                        return (
+                          <div
+                            key={msg.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectSession(session.id, msg.id);
+                            }}
+                            style={{
+                              fontSize: 12,
+                              color: colors.textMuted,
+                              cursor: "pointer",
+                              padding: "6px 8px",
+                              borderRadius: 6,
+                              backgroundColor:
+                                theme === "dark"
+                                  ? "rgba(255,255,255,0.03)"
+                                  : "rgba(0,0,0,0.03)",
+                              borderLeft: `2px solid ${colors.border}`,
+                              lineHeight: 1.4,
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor =
+                                theme === "dark"
+                                  ? "rgba(255,255,255,0.08)"
+                                  : "rgba(0,0,0,0.06)";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor =
+                                theme === "dark"
+                                  ? "rgba(255,255,255,0.03)"
+                                  : "rgba(0,0,0,0.03)";
+                            }}
+                          >
+                            <HighlightText
+                              text={snippet}
+                              highlight={searchQuery}
+                              isDark={isDark}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })
@@ -215,7 +349,7 @@ function Sidebar({
         <div style={styles.footer}>
           <button
             type="button"
-            onClick={onClearAllChats} // 👈 绑定到外部传进来的后端清空接口
+            onClick={onClearAllChats}
             style={{
               background: "none",
               border: "none",
