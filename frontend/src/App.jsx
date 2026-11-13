@@ -16,6 +16,7 @@ import {
   isAbortError,
   streamChat,
   syncSessionMessages,
+  generateChatTitle,
 } from "./api/chatApi";
 import { useCustomPrompts } from "./hooks/useCustomPrompts";
 
@@ -699,6 +700,21 @@ function App() {
         },
       });
       flushPending();
+      // 👈 新增：如果是第一轮对话，在后台静默生成更聪明的标题
+      if (baseMessages.length === 0 && finalMessages.length >= 2) {
+        generateChatTitle(finalMessages).then((newTitle) => {
+          if (newTitle && newTitle !== "New Chat") {
+            // 更新前端 UI
+            patchSession(sessionId, (s) => ({ ...s, title: newTitle }));
+            // 更新数据库
+            fetch(`${API_BASE}/sessions/${sessionId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ title: newTitle }),
+            }).catch(console.error);
+          }
+        });
+      }
     } catch (error) {
       // 1. 无论发生什么，先把缓存里还没刷新的字刷进去
       flushPending();

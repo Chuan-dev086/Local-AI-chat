@@ -432,6 +432,62 @@ app.post("/api/sessions", async (req, res) => {
   }
 });
 
+// ========================================
+// Generate a short title for a session based on the first conversation
+// ========================================
+app.post("/api/generate-title", async (req, res) => {
+  const { messages, model } = req.body;
+  if (!Array.isArray(messages) || messages.length < 2) {
+    return res
+      .status(400)
+      .json({ error: "Not enough messages to generate title." });
+  }
+
+  // 取第一轮的 user 和 assistant 消息
+  const userMsg = messages.find((m) => m.role === "user")?.content || "";
+  const asstMsg = messages.find((m) => m.role === "assistant")?.content || "";
+
+  // 提示词：强制模型只输出标题
+  const prompt = `Create a short, descriptive title (3-5 words) for the following conversation.
+Output ONLY the title. Do not use quotes, punctuation at the end, or any other text.
+
+User: ${userMsg.slice(0, 500)}
+Assistant: ${asstMsg.slice(0, 500)}
+Title:`;
+
+  try {
+    // 用默认的 chat 模型（它比 code 模型更擅长总结），且限制输出长度
+    const response = await axios.post(`${OLLAMA_URL}/api/generate`, {
+      model: DEFAULT_MODELS.chat,
+      prompt,
+      stream: false,
+      options: {
+        num_predict: 20,
+        temperature: 0.3,
+      },
+    });
+
+    let title = (response.data?.response || "").trim();
+
+    // 清理模型可能乱加的引号或前缀
+    title = title
+      .replace(/^["'「]|["'」]$/g, "")
+      .replace(/^Title:\s*/i, "")
+      .trim();
+
+    // 兜底：如果生成为空，或者过长，截取用户第一句话
+    if (!title || title.length > 30) {
+      title = userMsg.slice(0, 12).trim() || "New Chat";
+    }
+
+    res.json({ title });
+  } catch (error) {
+    console.error("[Title] Failed to generate:", error.message);
+    // 失败时不报错，让前端自己兜底
+    res.status(500).json({ error: "Failed to generate title." });
+  }
+});
+
 app.post("/api/chat", async (req, res) => {
   const body = req.body ?? {};
   const {

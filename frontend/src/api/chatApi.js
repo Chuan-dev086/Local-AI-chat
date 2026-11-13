@@ -44,6 +44,25 @@ export async function syncSessionMessages(sessionId, messages) {
   return response.json();
 }
 
+// ========================================
+// Chat title generation
+// ========================================
+export async function generateChatTitle(messages) {
+  try {
+    const response = await fetch(`${API_BASE}/generate-title`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages }),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.title;
+  } catch (error) {
+    console.error("Failed to generate title:", error);
+    return null;
+  }
+}
+
 // 读取 HTTP 错误响应中的错误信息，解析失败时使用通用提示
 async function readErrorMessage(response) {
   const fallback = `后端请求失败（HTTP ${response.status}）。`;
