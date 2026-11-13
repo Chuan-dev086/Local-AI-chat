@@ -12,7 +12,6 @@ import { getThemeStyles } from "./theme/theme";
 import {
   API_BASE,
   ChatApiError,
-  clearChat,
   fetchModels,
   isAbortError,
   streamChat,
@@ -501,32 +500,32 @@ function App() {
     if (!window.confirm("Clear all messages in this chat?")) return;
 
     const sessionId = activeSession.id;
-    try {
-      await clearChat(sessionId);
-      await fetch(`${API_BASE}/sessions/${sessionId}`, {
-        method: "DELETE",
-      });
-      const freshSession = createNewSession(activeSession.mode);
-      freshSession.id = sessionId;
-      await fetch(`${API_BASE}/sessions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(freshSession),
-      });
 
-      patchSession(sessionId, (session) => ({
-        ...session,
-        title: "New Chat",
-        messages: [],
-        updatedAt: nowIso(),
-      }));
-      setInput("");
-      setNotice({ severity: "success", message: "Chat cleared." });
+    // 1. 乐观更新前端状态：清空消息、重置标题
+    patchSession(sessionId, (session) => ({
+      ...session,
+      title: "New Chat",
+      messages: [],
+      updatedAt: nowIso(),
+    }));
+    setInput("");
+    setNotice({ severity: "success", message: "Chat cleared." });
+
+    // 2. 同步到后端：清空消息数组，并重置标题
+    try {
+      await Promise.all([
+        syncSessionMessages(sessionId, []),
+        fetch(`${API_BASE}/sessions/${sessionId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: "New Chat" }),
+        }),
+      ]);
     } catch (error) {
+      console.error("Failed to clear chat on backend:", error);
       setNotice({
         severity: "error",
-        message:
-          error instanceof Error ? error.message : "Failed to clear chat.",
+        message: "Failed to clear chat on backend.",
       });
     }
   };

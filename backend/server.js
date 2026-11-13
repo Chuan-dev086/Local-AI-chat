@@ -305,7 +305,7 @@ app.patch("/api/sessions/:id", async (req, res) => {
     const updatedSession = await Session.findOneAndUpdate(
       { id },
       { $set: updateFields },
-      { new: true },
+      { returnDocument: "after" },
     );
 
     if (!updatedSession) {
@@ -336,7 +336,7 @@ app.patch("/api/sessions/:id/pin", async (req, res) => {
     const updatedSession = await Session.findOneAndUpdate(
       { id },
       { $set: { isPinned } },
-      { new: true },
+      { returnDocument: "after" },
     );
 
     if (!updatedSession) {
@@ -430,21 +430,6 @@ app.post("/api/sessions", async (req, res) => {
     console.error("[Sessions] Failed to create session:", error.message);
     res.status(500).json({ error: "Failed to create chat session." });
   }
-});
-
-// ========================================
-// Chat API
-// ========================================
-
-app.post("/api/chat/clear", (req, res) => {
-  const { sessionId } = req.body ?? {};
-
-  if (typeof sessionId !== "string" || !sessionId.trim()) {
-    return res.status(400).json({ error: "sessionId is required." });
-  }
-
-  // Chat history is stored by the frontend; acknowledge clearing this session.
-  return res.json({ sessionId, cleared: true });
 });
 
 app.post("/api/chat", async (req, res) => {
