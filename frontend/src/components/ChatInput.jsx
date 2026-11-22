@@ -23,6 +23,7 @@ import {
   Delete,
   ManageAccounts as PromptIcon,
   Tune as SystemPromptIcon,
+  MenuBook,
 } from "@mui/icons-material";
 import { useState, useRef } from "react";
 import { getChatInputStyles } from "../theme/theme";
@@ -48,6 +49,8 @@ function ChatInput({
   onClearChat,
   onSelectPromptTemplate,
   onOpenPromptManager,
+  useRag,
+  onToggleRag,
 }) {
   const isInputEmpty = !input.trim() && !attachedFile;
   const styles = getChatInputStyles(theme, loading, isInputEmpty);
@@ -290,6 +293,43 @@ function ChatInput({
           }}
         >
           <AttachFile fontSize="small" />
+        </IconButton>
+
+        <IconButton
+          onClick={onToggleRag}
+          disabled={loading}
+          title={
+            useRag ? "Knowledge Base Mode: ON" : "Knowledge Base Mode: OFF"
+          }
+          sx={{
+            mb: 0.5,
+            mr: 0.5, // 和旁边的设置图标稍微拉开一点距离
+            // 开启时：白色图标，关闭时：灰色图标
+            color: useRag
+              ? "#ffffff"
+              : theme === "dark"
+                ? "#cbd5e1"
+                : "text.secondary",
+            // 开启时：实心紫蓝色背景，关闭时：透明
+            backgroundColor: useRag ? "#4f46e5" : "transparent",
+            // 开启时：带一点同色系的微光阴影，非常醒目
+            boxShadow: useRag ? "0 0 10px rgba(79, 70, 229, 0.6)" : "none",
+            transition: "all 0.2s ease",
+            "&:hover": {
+              backgroundColor: useRag
+                ? "#4338ca"
+                : theme === "dark"
+                  ? "rgba(255,255,255,0.1)"
+                  : "rgba(0,0,0,0.05)",
+              color: useRag
+                ? "#ffffff"
+                : theme === "dark"
+                  ? "#f1f5f9"
+                  : "text.primary",
+            },
+          }}
+        >
+          <MenuBook fontSize="small" />
         </IconButton>
 
         <IconButton

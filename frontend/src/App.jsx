@@ -17,6 +17,7 @@ import {
   streamChat,
   syncSessionMessages,
   generateChatTitle,
+  uploadDocument,
 } from "./api/chatApi";
 import { useCustomPrompts } from "./hooks/useCustomPrompts";
 
@@ -26,6 +27,9 @@ const SIDEBAR_KEY = "local_ai_chat_sidebar_collapsed";
 const DEFAULT_FILE_PROMPT = "请帮我分析这个文件。";
 const NEAR_BOTTOM_PX = 150;
 const SHOW_SCROLL_BUTTON_PX = 300;
+
+const DEFAULT_CHAT_MODEL = "llama3.2:3b";
+const DEFAULT_RAG_MODEL = "qwen3:4b-instruct-2507-q4_K_M";
 
 const DEFAULT_MODELS = {
   chat: "llama3.2:3b",
@@ -206,6 +210,7 @@ function App() {
     getInitialSidebarCollapsed,
   );
   const [scrollToMessageId, setScrollToMessageId] = useState(null);
+  const [useRag, setUseRag] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -397,6 +402,24 @@ function App() {
     setSessions((prev) => sortSessions([newSession, ...prev]));
     setActiveSessionId(newSession.id);
     setInput("");
+  };
+
+  const handleUploadDocument = async (file) => {
+    try {
+      setNotice({
+        severity: "info",
+        message: `正在解析并入库 ${file.name}，请稍候...`,
+      });
+      await uploadDocument(file);
+      setNotice({
+        severity: "success",
+        message: `文档 ${file.name} 已成功加入知识库！`,
+      });
+    } catch (error) {
+      console.error("Upload failed:", error);
+      setNotice({ severity: "error", message: error.message || "上传失败" });
+      throw error; // 抛出错误让 Sidebar 知道上传结束了
+    }
   };
 
   const handleSelectSession = (sessionId, messageId = null) => {
@@ -717,6 +740,7 @@ function App() {
         model,
         systemPrompt,
         messages: apiMessages,
+        useRag,
         signal: controller.signal,
         onChunk: (chunk) => {
           pending += chunk;
@@ -1005,6 +1029,7 @@ function App() {
             onTogglePin={handleTogglePin}
             onClearAllChats={handleClearAllChats} // 👈 传入清空所有会话的回调
             searchInputRef={searchInputRef}
+            onUploadDocument={handleUploadDocument}
           />
 
           <div style={themeStyles.mainContent}>
@@ -1097,6 +1122,24 @@ function App() {
                   onClearChat={handleClearChat}
                   onSelectPromptTemplate={handleSelectPromptTemplate}
                   onOpenPromptManager={() => setIsPromptManagerOpen(true)}
+                  useRag={useRag}
+                  onToggleRag={() => {
+                    const nextRag = !useRag;
+                    setUseRag(nextRag);
+
+                    // 👈 核心联动逻辑
+                    if (nextRag) {
+                      // 开启知识库时，自动切到 RAG 专用模型
+                      handleModelChange({
+                        target: { value: DEFAULT_RAG_MODEL },
+                      });
+                    } else {
+                      // 关闭知识库时，自动切回普通聊天模型
+                      handleModelChange({
+                        target: { value: DEFAULT_CHAT_MODEL },
+                      });
+                    }
+                  }}
                 />
               </div>
             </div>

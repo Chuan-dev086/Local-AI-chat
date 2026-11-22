@@ -35,15 +35,18 @@ async function extractTextFromPDF(filePath) {
 /**
  * 2. 将长文本切分成小块
  */
-function splitTextIntoChunks(text, chunkSize = 500, overlap = 50) {
+function splitTextIntoChunks(text, chunkSize = 1500, overlap = 200) {
   const chunks = [];
   let start = 0;
   while (start < text.length) {
     const end = Math.min(start + chunkSize, text.length);
     let chunk = text.slice(start, end);
 
-    // 尝试在句子边界处切分
-    const lastPeriod = chunk.lastIndexOf("。");
+    // 👈 修改这里：加上英文的句号 '.' 和换行 '\n'
+    const lastPeriod = Math.max(
+      chunk.lastIndexOf("。"),
+      chunk.lastIndexOf("."),
+    );
     const lastNewline = chunk.lastIndexOf("\n");
     const splitPoint = Math.max(lastPeriod, lastNewline);
 
@@ -101,7 +104,7 @@ async function ensureCollectionExists() {
 /**
  * 5. 主流程
  */
-async function processPDF(filePath) {
+export async function processPDFToQdrant(filePath) {
   console.log("🚀 开始 RAG 数据管道处理...");
 
   const fullText = await extractTextFromPDF(filePath);
@@ -135,12 +138,13 @@ async function processPDF(filePath) {
 }
 
 // --- 执行脚本 ---
-const pdfPath = process.argv[2];
-if (!pdfPath) {
-  console.error(
-    "❌ 请提供 PDF 文件路径。用法: node rag-pipeline.js <pdf-file-path>",
-  );
-  process.exit(1);
+if (process.argv[1] && process.argv[1].endsWith("rag-pipeline.js")) {
+  const pdfPath = process.argv[2];
+  if (!pdfPath) {
+    console.error(
+      "❌ 请提供 PDF 文件路径。用法: node rag-pipeline.js <pdf-file-path>",
+    );
+    process.exit(1);
+  }
+  processPDFToQdrant(pdfPath).catch(console.error);
 }
-
-processPDF(pdfPath).catch(console.error);

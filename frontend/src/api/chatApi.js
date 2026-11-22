@@ -144,6 +144,30 @@ export async function fetchModels({ signal } = {}) {
   }
 }
 
+// 👈 新增：上传 PDF 到知识库
+export async function uploadDocument(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/rag/upload`, {
+      method: "POST",
+      body: formData, // 注意：不要设置 Content-Type，浏览器会自动带上带 boundary 的 multipart/form-data
+    });
+  } catch (error) {
+    throw new ChatApiError("无法连接到后端，文件上传失败。", { cause: error });
+  }
+
+  if (!response.ok) {
+    throw new ChatApiError(await readErrorMessage(response), {
+      status: response.status,
+    });
+  }
+
+  return response.json();
+}
+
 // ========================================
 // Context Window & Token Truncation Helper
 // ========================================
@@ -210,6 +234,7 @@ export async function streamChat({
   messages,
   onChunk,
   signal,
+  useRag,
 }) {
   if (typeof onChunk !== "function") {
     throw new TypeError("streamChat: onChunk must be a function.");
@@ -230,6 +255,7 @@ export async function streamChat({
         model,
         systemPrompt,
         messages: safeMessages,
+        useRag,
       }),
       signal,
     });

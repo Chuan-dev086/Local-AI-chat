@@ -9,7 +9,12 @@ import {
   Typography,
   IconButton,
 } from "@mui/material";
-import { Search, PushPin, PushPinOutlined } from "@mui/icons-material";
+import {
+  Search,
+  PushPin,
+  PushPinOutlined,
+  CloudUpload,
+} from "@mui/icons-material";
 import { getSidebarStyles, getThemeStyles } from "../theme/theme";
 
 // 辅助函数：转义正则特殊字符，防止搜索时输入特殊符号导致报错
@@ -58,6 +63,7 @@ function Sidebar({
   onTogglePin,
   onClearAllChats,
   searchInputRef,
+  onUploadDocument,
 }) {
   const styles = getSidebarStyles(theme, collapsed);
   const { colors, isDark } = getThemeStyles(theme); // 确保拿到 isDark 用于高亮颜色
@@ -66,6 +72,21 @@ function Sidebar({
   const [editingSessionId, setEditingSessionId] = useState(null);
   const [editingTitle, setEditingTitle] = useState("");
   const renameInputRef = useRef(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const docInputRef = useRef(null);
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      await onUploadDocument(file);
+    } finally {
+      setIsUploading(false);
+      e.target.value = null; // 清空 input，允许重复上传同一个文件
+    }
+  };
 
   const startRename = (event, session) => {
     event.stopPropagation();
@@ -128,6 +149,35 @@ function Sidebar({
             sx={styles.newChatBtnSx(loading)}
           >
             + New Chat
+          </Button>
+
+          {/* 👈 新增：上传知识库按钮和隐藏的 input */}
+          <input
+            type="file"
+            accept=".pdf"
+            style={{ display: "none" }}
+            ref={docInputRef}
+            onChange={handleFileChange}
+          />
+          <Button
+            type="button"
+            onClick={() => docInputRef.current?.click()}
+            disabled={loading || isUploading}
+            variant="outlined"
+            fullWidth
+            startIcon={<CloudUpload />}
+            sx={{
+              mt: 1.5,
+              color: colors.text,
+              borderColor: colors.border,
+              textTransform: "none",
+              "&:hover": {
+                borderColor: colors.buttonBg,
+                backgroundColor: "transparent",
+              },
+            }}
+          >
+            {isUploading ? "解析中..." : "Upload PDF"}
           </Button>
 
           <Box sx={{ mt: 2 }}>
