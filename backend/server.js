@@ -25,6 +25,8 @@ const qdrant = new QdrantClient({ url: "http://localhost:6333" });
 // Embedding model and collection name for RAG
 const EMBEDDING_MODEL = "nomic-embed-text";
 const COLLECTION_NAME = "my_knowledge_base";
+const RAG_TOP_K = Number(process.env.RAG_TOP_K) || 5;
+const RAG_TEMPERATURE = Number(process.env.RAG_TEMPERATURE) || 0.1;
 
 // 允许访问后端的前端来源，多个用英文逗号分隔
 const CORS_ORIGINS = (
@@ -515,7 +517,7 @@ app.post("/api/rag/upload", upload.single("file"), async (req, res) => {
 
   try {
     // 调用我们写好的处理函数，解析并存入 Qdrant
-    await processPDFToQdrant(filePath);
+    await processPDFToQdrant(filePath, originalName);
 
     // 处理完成后，删除本地暂存的临时文件
     await fs.unlink(filePath);
@@ -584,6 +586,7 @@ app.post("/api/chat", async (req, res) => {
       : "";
 
   let systemMessageContent = customPrompt || SYSTEM_PROMPTS[normalizedMode];
+  let isRagActive = false;
 
   // 👈 新增：如果开启了 RAG，先检索知识库并拼接到 Prompt 里
   if (useRag) {
@@ -594,32 +597,59 @@ app.post("/api/chat", async (req, res) => {
         prompt: message,
       });
 
-      // 2. 去 Qdrant 查最相关的 10 个片段
+      // 2. 去 Qdrant 查最相关的 RAG_TOP_K 个片段
       const searchResult = await qdrant.query(COLLECTION_NAME, {
         query: embedRes.data.embedding,
-        limit: 10,
+        limit: RAG_TOP_K,
         with_payload: true,
       });
 
-      // 3. 提取文本
-      const contextText = searchResult.points
-        .map((hit) => hit.payload.text)
+      // 3. 提取文本并打印一行摘要日志
+      const hits = searchResult.points || [];
+      if (hits.length > 0) {
+        console.log(
+          `  ${c.green}📚 [RAG] Retrieved ${hits.length} chunks (Top K = ${RAG_TOP_K}):${c.reset}`,
+        );
+        hits.forEach((hit, idx) => {
+          const score =
+            typeof hit.score === "number" ? hit.score.toFixed(4) : "N/A";
+          const source = hit.payload?.source || "unknown";
+          const chunkIndex =
+            hit.payload?.chunkIndex !== undefined
+              ? hit.payload.chunkIndex
+              : "N/A";
+          console.log(
+            `     [${idx + 1}] score=${score} | source=${source} | chunk=${chunkIndex}`,
+          );
+        });
+      }
+
+      const contextText = hits
+        .map((hit) => hit.payload?.text)
+        .filter(Boolean)
         .join("\n\n---\n\n");
 
-      console.log("\n---  Retrieved raw chunks from Qdrant:");
-      console.log(contextText.slice(0, 500) + "...\n");
+      if (contextText.trim()) {
+        isRagActive = true;
+        const ragPromptExtension = `
 
-      if (contextText) {
-        systemMessageContent = `You are an expert assistant for document analysis.
-You must answer the user's question based STRICTLY on the facts provided in the Context below. 
-The Context is in English, but you MUST translate the facts and answer the user in CHINESE.
-If the answer truly does not exist in the Context, you must say "文档中没有提到相关内容".
+=== RAG KNOWLEDGE BASE CONTEXT ===
+The following reference Context is retrieved from the uploaded documents in the knowledge base:
 
 Context:
 ${contextText}
+
+RAG Strict Rules:
+1. Answer the user's question based STRICTLY and ONLY on the facts provided in the Context above.
+2. The language of your response MUST match the language used by the user in their prompt/question. (Do NOT translate to other languages unless the user explicitly requested a translation).
+3. Do NOT add external facts, examples, tool names, libraries, version numbers, or dates that are not present in the Context.
+4. If the answer cannot be found in the Context, state clearly in the user's language: "文档中没有提到相关内容" (or the equivalent in the user's language, e.g. "The provided document does not mention this.").
+5. Stick strictly to the original meaning and phrasing from the Context without expansion or embellishment.
+=== END OF CONTEXT ===
 `;
+        systemMessageContent += ragPromptExtension;
         console.log(
-          `  ${c.green}📚 [RAG] Injected ${searchResult.points.length} context chunks into prompt.${c.reset}`,
+          `  ${c.green}📚 [RAG] Appended ${hits.length} context chunks to system prompt.${c.reset}`,
         );
       }
     } catch (error) {
@@ -751,6 +781,15 @@ ${contextText}
   // ========================================
 
   let upstream;
+  const ollamaOptions = {
+    num_predict: MAX_OUTPUT_TOKENS,
+    num_ctx: NUM_CTX,
+    num_batch: NUM_BATCH,
+  };
+  if (isRagActive) {
+    ollamaOptions.temperature = RAG_TEMPERATURE;
+  }
+
   try {
     upstream = await axios.post(
       `${OLLAMA_URL}/api/chat`,
@@ -758,11 +797,7 @@ ${contextText}
         model: selectedModel,
         messages: ollamaMessages,
         stream: true,
-        options: {
-          num_predict: MAX_OUTPUT_TOKENS,
-          num_ctx: NUM_CTX,
-          num_batch: NUM_BATCH,
-        },
+        options: ollamaOptions,
       },
       {
         responseType: "stream",
