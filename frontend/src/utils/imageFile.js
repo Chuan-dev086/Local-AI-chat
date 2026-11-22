@@ -1,7 +1,9 @@
 // frontend/src/utils/imageFile.js
 
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
+
 /**
- * Process a single image file, validate its format (PNG/JPEG),
+ * Process a single image file, validate its format (PNG/JPEG) and size (<= 5MB),
  * and read it as base64 for chat attachment.
  */
 export function processImageFile(file, onAttachFile, onError) {
@@ -13,6 +15,11 @@ export function processImageFile(file, onAttachFile, onError) {
 
   if (!isImage) {
     onError?.("仅支持上传 PNG 或 JPEG 格式的图片。");
+    return;
+  }
+
+  if (file.size > MAX_IMAGE_BYTES) {
+    onError?.("图片大小不能超过 5MB。");
     return;
   }
 

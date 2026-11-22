@@ -18,6 +18,7 @@ const app = express();
 // Configuration (from backend/.env)
 // ========================================
 
+const HOST = process.env.HOST || "127.0.0.1";
 const PORT = Number(process.env.PORT) || 5000;
 const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
 // Qdrant server URL, default to localhost:6333 if not set
@@ -27,6 +28,9 @@ const EMBEDDING_MODEL = "nomic-embed-text";
 const COLLECTION_NAME = "my_knowledge_base";
 const RAG_TOP_K = Number(process.env.RAG_TOP_K) || 5;
 const RAG_TEMPERATURE = Number(process.env.RAG_TEMPERATURE) || 0.1;
+const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB) || 20;
+const MAX_PDF_CHARS = Number(process.env.MAX_PDF_CHARS) || 2000000;
+const MAX_IMAGE_BYTES = Number(process.env.MAX_IMAGE_BYTES) || 5 * 1024 * 1024;
 
 // 允许访问后端的前端来源，多个用英文逗号分隔
 const CORS_ORIGINS = (
@@ -88,8 +92,35 @@ app.use(
 
 app.use(express.json({ limit: "20mb" }));
 
-// 配置 Multer，将文件暂存到 uploads 文件夹
-const upload = multer({ dest: "uploads/" });
+// 配置 Multer，限制文件体积、单文件上传以及 PDF 类型白名单
+const upload = multer({
+  dest: "uploads/",
+  limits: {
+    fileSize: MAX_UPLOAD_MB * 1024 * 1024,
+    files: 1,
+  },
+  fileFilter: (req, file, cb) => {
+    const hasPdfExt = /\.pdf$/i.test(file.originalname || "");
+    const isPdfMime = file.mimetype === "application/pdf";
+    if (!hasPdfExt || !isPdfMime) {
+      const err = new Error("仅允许上传 PDF 格式文件 (.pdf)。");
+      err.code = "INVALID_FILE_TYPE";
+      return cb(err, false);
+    }
+    cb(null, true);
+  },
+});
+
+/**
+ * 计算 Base64 图片数据的实际解码字节大小
+ */
+function getImageByteLength(base64OrDataUrl) {
+  if (typeof base64OrDataUrl !== "string") return 0;
+  const commaIdx = base64OrDataUrl.indexOf(",");
+  const rawBase64 =
+    commaIdx !== -1 ? base64OrDataUrl.slice(commaIdx + 1) : base64OrDataUrl;
+  return Buffer.byteLength(rawBase64, "base64");
+}
 
 // ========================================
 // Terminal Colors & Log Helpers
@@ -376,6 +407,17 @@ app.put("/api/sessions/:id/messages", async (req, res) => {
       return res.status(400).json({ error: "messages must be an array." });
     }
 
+    // 校验图片大小：任何一张图片超过限制，直接拒绝整个请求
+    for (const m of messages) {
+      if (m && typeof m.imageBase64 === "string" && m.imageBase64.trim()) {
+        if (getImageByteLength(m.imageBase64) > MAX_IMAGE_BYTES) {
+          return res.status(400).json({
+            error: `Image size exceeds limit of ${Math.round(MAX_IMAGE_BYTES / (1024 * 1024))}MB.`,
+          });
+        }
+      }
+    }
+
     // 过滤：role 合法 + content 是字符串 + assistant 必须有非空内容
     const valid = messages.filter(
       (m) =>
@@ -505,40 +547,82 @@ Title:`;
 // ========================================
 // RAG Upload API
 // ========================================
-app.post("/api/rag/upload", upload.single("file"), async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: "No file uploaded." });
-  }
-
-  const filePath = req.file.path;
-  const originalName = req.file.originalname;
-
-  console.log(`\n📥 [RAG] Received file: ${originalName}`);
-
-  try {
-    // 调用我们写好的处理函数，解析并存入 Qdrant
-    await processPDFToQdrant(filePath, originalName);
-
-    // 处理完成后，删除本地暂存的临时文件
-    await fs.unlink(filePath);
-
-    res.json({
-      success: true,
-      message: "Document processed and added to knowledge base.",
+app.post(
+  "/api/rag/upload",
+  (req, res, next) => {
+    upload.single("file")(req, res, async (err) => {
+      if (err) {
+        if (req.file?.path) {
+          await fs.unlink(req.file.path).catch(() => {});
+        }
+        if (err instanceof multer.MulterError) {
+          if (err.code === "LIMIT_FILE_SIZE") {
+            return res.status(413).json({
+              error: `文件大小超出限制，最大允许 ${MAX_UPLOAD_MB}MB。`,
+            });
+          }
+          return res.status(400).json({ error: err.message });
+        }
+        if (err.code === "INVALID_FILE_TYPE") {
+          return res.status(400).json({ error: err.message });
+        }
+        return res
+          .status(400)
+          .json({ error: err.message || "文件上传失败。" });
+      }
+      next();
     });
-  } catch (error) {
-    console.error("❌ [RAG] Failed to process document:", error);
+  },
+  async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded." });
+    }
 
-    // 即使报错也要清理临时文件
+    const filePath = req.file.path;
+    const originalName = req.file.originalname;
+
+    console.log(`\n📥 [RAG] Received file: ${originalName}`);
+
     try {
-      await fs.unlink(filePath);
-    } catch (e) {}
+      // 1. 校验文件头部魔数（必须以 "%PDF-" 开头）
+      const handle = await fs.open(filePath, "r");
+      const magicBuffer = Buffer.alloc(5);
+      await handle.read(magicBuffer, 0, 5, 0);
+      await handle.close();
 
-    res
-      .status(500)
-      .json({ error: "Failed to process document.", details: error.message });
-  }
-});
+      if (magicBuffer.toString("utf-8") !== "%PDF-") {
+        await fs.unlink(filePath).catch(() => {});
+        return res.status(400).json({
+          error: "文件格式非法：缺少有效的 PDF 魔数标识 (%PDF-)。",
+        });
+      }
+
+      // 2. 调用处理函数，解析并存入 Qdrant
+      await processPDFToQdrant(filePath, originalName);
+
+      // 处理完成后，删除本地暂存的临时文件
+      await fs.unlink(filePath).catch(() => {});
+
+      res.json({
+        success: true,
+        message: "Document processed and added to knowledge base.",
+      });
+    } catch (error) {
+      console.error("❌ [RAG] Failed to process document:", error);
+
+      // 即使报错也要清理临时文件
+      try {
+        await fs.unlink(filePath);
+      } catch (e) {}
+
+      const isValidationError =
+        error.code === "EMPTY_PDF_CONTENT" || error.code === "PDF_TOO_LONG";
+      res.status(isValidationError ? 400 : 500).json({
+        error: error.message || "Failed to process document.",
+      });
+    }
+  },
+);
 
 app.post("/api/chat", async (req, res) => {
   const body = req.body ?? {};
@@ -566,6 +650,40 @@ app.post("/api/chat", async (req, res) => {
 
   if (!Array.isArray(messages)) {
     return res.status(400).json({ error: "messages must be an array." });
+  }
+
+  // 校验图片数量与大小
+  if (body.images !== undefined) {
+    if (!Array.isArray(body.images)) {
+      return res.status(400).json({ error: "images must be an array." });
+    }
+    if (body.images.length > 4) {
+      return res.status(400).json({ error: "Maximum 4 images allowed." });
+    }
+    for (const img of body.images) {
+      if (getImageByteLength(img) > MAX_IMAGE_BYTES) {
+        return res.status(400).json({
+          error: `Image size exceeds limit of ${Math.round(MAX_IMAGE_BYTES / (1024 * 1024))}MB.`,
+        });
+      }
+    }
+  }
+
+  for (const m of messages) {
+    if (m && Array.isArray(m.images)) {
+      if (m.images.length > 4) {
+        return res
+          .status(400)
+          .json({ error: "Maximum 4 images allowed per message." });
+      }
+      for (const img of m.images) {
+        if (getImageByteLength(img) > MAX_IMAGE_BYTES) {
+          return res.status(400).json({
+            error: `Image size exceeds limit of ${Math.round(MAX_IMAGE_BYTES / (1024 * 1024))}MB.`,
+          });
+        }
+      }
+    }
   }
 
   const normalizedMode = mode === "code" ? "code" : "chat";
@@ -645,6 +763,7 @@ RAG Strict Rules:
 3. Do NOT add external facts, examples, tool names, libraries, version numbers, or dates that are not present in the Context.
 4. If the answer cannot be found in the Context, state clearly in the user's language: "文档中没有提到相关内容" (or the equivalent in the user's language, e.g. "The provided document does not mention this.").
 5. Stick strictly to the original meaning and phrasing from the Context without expansion or embellishment.
+6. Do NOT use LaTeX formulas ($ or $$) unless the Context itself explicitly contains mathematical formulas. When citing text, quotes, or statements from the Context, use standard quotation marks or Markdown blockquotes (>) instead of formula blocks.
 === END OF CONTEXT ===
 `;
         systemMessageContent += ragPromptExtension;
@@ -991,8 +1110,26 @@ RAG Strict Rules:
 // ========================================
 
 connectDB().then(() => {
-  const server = app.listen(PORT, () => {
-    console.log(`Server running at http://localhost:${PORT}`);
+  const isLoopback = ["127.0.0.1", "localhost", "::1"].includes(HOST);
+  if (!isLoopback) {
+    console.warn("\n" + "=".repeat(70));
+    console.warn(
+      `⚠️  [SECURITY WARNING] Server is bound to a non-loopback host: ${HOST}`,
+    );
+    console.warn(
+      "⚠️  There is currently NO authentication or access control enabled.",
+    );
+    console.warn(
+      "⚠️  Exposing this server to LAN or public network carries serious security risks!",
+    );
+    console.warn("=".repeat(70) + "\n");
+  }
+
+  const server = app.listen(PORT, HOST, () => {
+    const addr = server.address();
+    const actualHost = typeof addr === "object" && addr ? addr.address : HOST;
+    const actualPort = typeof addr === "object" && addr ? addr.port : PORT;
+    console.log(`Server running at http://${actualHost}:${actualPort}`);
     console.log(`Ollama URL: ${OLLAMA_URL}`);
     console.log(`CORS origins: ${CORS_ORIGINS.join(", ")}`);
     console.log(`Max context messages: ${MAX_CONTEXT_MESSAGES}`);
@@ -1003,7 +1140,7 @@ connectDB().then(() => {
   server.on("error", (error) => {
     if (error.code === "EADDRINUSE") {
       console.error(
-        `Port ${PORT} is already in use. Stop the other process or change PORT in .env.`,
+        `Port ${PORT} on ${HOST} is already in use. Stop the other process or change PORT/HOST in .env.`,
       );
     } else {
       console.error("Server error:", error);

@@ -180,7 +180,7 @@ npm install
 npm run dev
 ```
 
-The server runs at **http://localhost:5000** and connects to MongoDB.
+The server runs at **http://127.0.0.1:5000** and connects to MongoDB.
 
 ### 5. Start the frontend
 
@@ -202,6 +202,7 @@ Then open **http://localhost:5173** in your browser.
 
 | Variable | Default (Code) | Description |
 | :--- | :--- | :--- |
+| `HOST` | `127.0.0.1` | Host address the backend binds to (defaults to `127.0.0.1` to avoid exposing the unauthenticated service to LAN) |
 | `PORT` | `5000` | Port the backend listens on |
 | `MONGODB_URI` | `mongodb://localhost:27017/local_ai_chat` | Connection URI for the MongoDB database |
 | `OLLAMA_URL` | `http://localhost:11434` | Base URL of your local Ollama server |

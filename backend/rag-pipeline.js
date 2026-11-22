@@ -11,6 +11,7 @@ const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
 const EMBEDDING_MODEL = "nomic-embed-text";
 const QDRANT_URL = "http://localhost:6333";
 const COLLECTION_NAME = "my_knowledge_base";
+const MAX_PDF_CHARS = Number(process.env.MAX_PDF_CHARS) || 2000000;
 
 const qdrant = new QdrantClient({ url: QDRANT_URL });
 
@@ -189,6 +190,21 @@ export async function processPDFToQdrant(filePath, originalName) {
 
   const rawText = await extractTextFromPDF(filePath);
   const cleanedText = cleanPDFText(rawText);
+
+  if (!cleanedText.trim()) {
+    const error = new Error("PDF 解析后纯文本内容为空，无法生成知识库切片。");
+    error.code = "EMPTY_PDF_CONTENT";
+    throw error;
+  }
+
+  if (cleanedText.length > MAX_PDF_CHARS) {
+    const error = new Error(
+      `PDF 解析后文本字符数 (${cleanedText.length}) 超出允许的上限 (${MAX_PDF_CHARS} 字符)。`,
+    );
+    error.code = "PDF_TOO_LONG";
+    throw error;
+  }
+
   const chunks = splitTextIntoChunks(cleanedText);
   await ensureCollectionExists();
 

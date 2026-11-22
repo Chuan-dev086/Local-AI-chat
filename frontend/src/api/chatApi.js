@@ -1,8 +1,8 @@
 // src/api/chatApi.js
 
-// 可通过 frontend/.env.local 中的 VITE_API_BASE 覆盖，例如 VITE_API_BASE=http://localhost:5000/api
+// 可通过 frontend/.env.local 中的 VITE_API_BASE 覆盖，例如 VITE_API_BASE=http://127.0.0.1:5000/api
 export const API_BASE =
-  import.meta.env.VITE_API_BASE?.trim() || "http://localhost:5000/api";
+  import.meta.env.VITE_API_BASE?.trim() || "http://127.0.0.1:5000/api";
 const CHAT_URL = `${API_BASE}/chat`;
 const MODELS_URL = `${API_BASE}/models`;
 const MODELS_TIMEOUT_MS = 5000;
