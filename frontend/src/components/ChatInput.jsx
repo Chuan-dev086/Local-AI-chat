@@ -27,6 +27,7 @@ import {
 } from "@mui/icons-material";
 import { useState, useRef } from "react";
 import { getChatInputStyles } from "../theme/theme";
+import { processImageFile } from "../utils/imageFile";
 
 function ChatInput({
   input,
@@ -51,6 +52,7 @@ function ChatInput({
   onOpenPromptManager,
   useRag,
   onToggleRag,
+  onError,
 }) {
   const isInputEmpty = !input.trim() && !attachedFile;
   const styles = getChatInputStyles(theme, loading, isInputEmpty);
@@ -62,23 +64,14 @@ function ChatInput({
   const fileInputRef = useRef(null);
 
   const handleFileChange = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
 
     if (
-      /^image\/(png|jpeg)$/.test(file.type) ||
+      /^image\/(png|jpeg)$/i.test(file.type) ||
       /\.(png|jpe?g)$/i.test(file.name)
     ) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUrl = String(event.target.result || "");
-        onAttachFile({
-          name: file.name,
-          imageBase64: dataUrl.split(",")[1],
-          mimeType: file.type || "image/jpeg",
-        });
-      };
-      reader.readAsDataURL(file);
+      processImageFile(file, onAttachFile, onError);
       e.target.value = null;
       return;
     }
@@ -182,24 +175,7 @@ function ChatInput({
   };
 
   return (
-    <div
-      style={styles.wrapper}
-      onDragOver={(event) => {
-        if (Array.from(event.dataTransfer.types).includes("Files"))
-          event.preventDefault();
-      }}
-      onDrop={(event) => {
-        const file = event.dataTransfer.files?.[0];
-        if (
-          file &&
-          (/^image\/(png|jpeg)$/.test(file.type) ||
-            /\.(png|jpe?g)$/i.test(file.name))
-        ) {
-          event.preventDefault();
-          handleFileChange({ target: { files: [file], value: null } });
-        }
-      }}
-    >
+    <div style={styles.wrapper}>
       {attachedFile &&
         (attachedFile.imageBase64 ? (
           <Box

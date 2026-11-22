@@ -247,25 +247,43 @@ function Sidebar({
                           }
                         }}
                         size="small"
-                        variant="standard"
+                        variant="outlined"
                         inputProps={{ "aria-label": `Rename ${session.title}` }}
                         sx={{
                           flex: 1,
                           minWidth: 0,
-                          "& .MuiInput-root": {
-                            height: 24,
+                          "& .MuiOutlinedInput-root": {
+                            height: 28,
+                            backgroundColor: isDark ? "#0f172a" : "#ffffff",
                             color: colors.text,
+                            borderRadius: "6px",
+                            padding: "0 6px",
+                            boxShadow: isDark
+                              ? "0 1px 3px rgba(0,0,0,0.4)"
+                              : "0 1px 2px rgba(0,0,0,0.06)",
+                            "& fieldset": {
+                              borderColor: isDark ? "#475569" : "#cbd5e1",
+                              borderWidth: "1px",
+                              transition: "border-color 0.2s, box-shadow 0.2s",
+                            },
+                            "&:hover fieldset": {
+                              borderColor: "#4f46e5",
+                            },
+                            "&.Mui-focused": {
+                              boxShadow: "0 0 0 2px rgba(79, 70, 229, 0.25)",
+                            },
+                            "&.Mui-focused fieldset": {
+                              borderColor: "#4f46e5",
+                              borderWidth: "1.5px",
+                            },
                           },
-                          "& .MuiInput-input": {
-                            boxSizing: "border-box",
-                            height: 24,
-                            py: 0,
-                            px: 0,
+                          "& .MuiOutlinedInput-input": {
+                            padding: "0 2px",
+                            height: "28px",
+                            lineHeight: "28px",
                             fontSize: 14,
                             fontWeight: isActive ? 700 : 500,
-                          },
-                          "& .MuiInput-root:before, & .MuiInput-root:after": {
-                            display: "none",
+                            boxSizing: "border-box",
                           },
                         }}
                       />

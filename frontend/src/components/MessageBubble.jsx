@@ -49,6 +49,7 @@ function MessageBubble({
   loading,
   onEditMessage,
   onRegenerate,
+  onStop,
 }) {
   const { isDark, colors } = getThemeStyles(theme);
   const isUser = message.role === "user";
@@ -57,6 +58,14 @@ function MessageBubble({
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(message.content);
   const [copied, setCopied] = useState(false);
+
+  const handleStartEdit = () => {
+    if (loading) {
+      onStop?.();
+    }
+    setEditText(message.content);
+    setIsEditing(true);
+  };
 
   const handleCopyMessage = async () => {
     try {
@@ -136,15 +145,21 @@ function MessageBubble({
                 <Button
                   size="small"
                   variant="contained"
+                  disabled={loading || !editText.trim()}
                   onClick={handleSaveEdit}
                   sx={{
                     backgroundColor: "#4f46e5",
                     color: "#ffffff",
                     textTransform: "none",
                     "&:hover": { backgroundColor: "#3f3bc4" },
+                    "&.Mui-disabled": {
+                      backgroundColor: isDark ? "#334155" : "#cbd5e1",
+                      color: isDark ? "#64748b" : "#94a3b8",
+                      opacity: 0.8,
+                    },
                   }}
                 >
-                  Save & Resend
+                  {loading ? "Stopping…" : "Save & Resend"}
                 </Button>
               </div>
             </div>
@@ -334,7 +349,7 @@ function MessageBubble({
                 <Tooltip title="Edit" placement="top" arrow>
                   <button
                     type="button"
-                    onClick={() => setIsEditing(true)}
+                    onClick={handleStartEdit}
                     style={{
                       background: "none",
                       border: "none",

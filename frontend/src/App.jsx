@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, ThemeProvider, createTheme } from "@mui/material";
+import { CloudUpload } from "@mui/icons-material";
 import Sidebar from "./components/Sidebar";
 import ChatHeader from "./components/ChatHeader";
 import MessageList from "./components/MessageList";
 import ChatInput from "./components/ChatInput";
+import { processImageFile } from "./utils/imageFile";
 import SystemPromptDialog from "./components/SystemPromptDialog";
 import PromptManagerDialog from "./components/PromptManagerDialog";
 import { getThemeStyles } from "./theme/theme";
@@ -211,6 +213,25 @@ function App() {
   );
   const [scrollToMessageId, setScrollToMessageId] = useState(null);
   const [useRag, setUseRag] = useState(false);
+  const [isDraggingOverChat, setIsDraggingOverChat] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  useEffect(() => {
+    const handleGlobalDrag = (e) => {
+      if (
+        e.dataTransfer?.types &&
+        Array.from(e.dataTransfer.types).includes("Files")
+      ) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("dragover", handleGlobalDrag);
+    window.addEventListener("drop", handleGlobalDrag);
+    return () => {
+      window.removeEventListener("dragover", handleGlobalDrag);
+      window.removeEventListener("drop", handleGlobalDrag);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1004,6 +1025,73 @@ function App() {
     container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
   };
 
+  const handleChatDragEnter = (e) => {
+    if (
+      e.dataTransfer?.types &&
+      Array.from(e.dataTransfer.types).includes("Files")
+    ) {
+      e.preventDefault();
+      dragCounterRef.current += 1;
+      if (dragCounterRef.current === 1) {
+        setIsDraggingOverChat(true);
+      }
+    }
+  };
+
+  const handleChatDragOver = (e) => {
+    if (
+      e.dataTransfer?.types &&
+      Array.from(e.dataTransfer.types).includes("Files")
+    ) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    }
+  };
+
+  const handleChatDragLeave = (e) => {
+    if (
+      e.dataTransfer?.types &&
+      Array.from(e.dataTransfer.types).includes("Files")
+    ) {
+      e.preventDefault();
+      dragCounterRef.current -= 1;
+      if (dragCounterRef.current <= 0) {
+        dragCounterRef.current = 0;
+        setIsDraggingOverChat(false);
+      }
+    }
+  };
+
+  const handleChatDrop = (e) => {
+    if (
+      e.dataTransfer?.types &&
+      Array.from(e.dataTransfer.types).includes("Files")
+    ) {
+      e.preventDefault();
+      dragCounterRef.current = 0;
+      setIsDraggingOverChat(false);
+
+      if (loading) {
+        return;
+      }
+
+      const files = Array.from(e.dataTransfer.files || []);
+      if (files.length === 0) return;
+
+      if (files.length > 1) {
+        setNotice({
+          severity: "error",
+          message: "仅支持单张图片上传，请勿同时拖入多个文件。",
+        });
+        return;
+      }
+
+      processImageFile(files[0], setAttachedFile, (errMsg) => {
+        setNotice({ severity: "error", message: errMsg });
+      });
+    }
+  };
+
   if (!chatStorageReady) {
     return (
       <main style={themeStyles.page} aria-live="polite">
@@ -1032,7 +1120,57 @@ function App() {
             onUploadDocument={handleUploadDocument}
           />
 
-          <div style={themeStyles.mainContent}>
+          <div
+            style={{ ...themeStyles.mainContent, position: "relative" }}
+            onDragEnter={handleChatDragEnter}
+            onDragOver={handleChatDragOver}
+            onDragLeave={handleChatDragLeave}
+            onDrop={handleChatDrop}
+          >
+            {isDraggingOverChat && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  zIndex: 100,
+                  backgroundColor:
+                    theme === "dark"
+                      ? "rgba(15, 23, 42, 0.88)"
+                      : "rgba(255, 255, 255, 0.88)",
+                  border: "2px dashed #4f46e5",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  pointerEvents: "none",
+                  backdropFilter: "blur(2px)",
+                }}
+              >
+                <CloudUpload sx={{ fontSize: 52, color: "#4f46e5", mb: 1 }} />
+                <div
+                  style={{
+                    fontSize: 18,
+                    fontWeight: 600,
+                    color: themeStyles.colors?.text || "#000",
+                  }}
+                >
+                  松开以上传图片
+                </div>
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: themeStyles.colors?.textMuted || "#666",
+                    marginTop: 4,
+                  }}
+                >
+                  仅支持 PNG 或 JPEG 格式
+                </div>
+              </div>
+            )}
+
             {notice && (
               <Alert
                 severity={notice.severity}
@@ -1068,6 +1206,7 @@ function App() {
                   theme={theme}
                   onEditMessage={handleEditMessage}
                   onRegenerate={handleRegenerate}
+                  onStop={handleStop}
                 />
               </div>
             </div>
@@ -1122,6 +1261,9 @@ function App() {
                   onClearChat={handleClearChat}
                   onSelectPromptTemplate={handleSelectPromptTemplate}
                   onOpenPromptManager={() => setIsPromptManagerOpen(true)}
+                  onError={(message) =>
+                    setNotice({ severity: "error", message })
+                  }
                   useRag={useRag}
                   onToggleRag={() => {
                     const nextRag = !useRag;

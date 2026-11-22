@@ -10,6 +10,7 @@ function MessageList({
   theme,
   onEditMessage,
   onRegenerate,
+  onStop,
 }) {
   const styles = getMessageListStyles(theme);
 
@@ -33,7 +34,7 @@ function MessageList({
 
       {activeSession?.messages.map((message, index) => (
         <MessageBubble
-          key={`${message.role}-${index}`}
+          key={message.id || `${message.role}-${index}`}
           index={index}
           message={message}
           theme={theme}
@@ -41,6 +42,7 @@ function MessageList({
           loading={loading}
           onEditMessage={onEditMessage}
           onRegenerate={onRegenerate}
+          onStop={onStop}
         />
       ))}
 
