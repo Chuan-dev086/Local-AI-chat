@@ -31,6 +31,10 @@ const RAG_TEMPERATURE = Number(process.env.RAG_TEMPERATURE) || 0.1;
 const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB) || 20;
 const MAX_PDF_CHARS = Number(process.env.MAX_PDF_CHARS) || 2000000;
 const MAX_IMAGE_BYTES = Number(process.env.MAX_IMAGE_BYTES) || 5 * 1024 * 1024;
+const MAX_MESSAGES_PER_SESSION =
+  Number(process.env.MAX_MESSAGES_PER_SESSION) || 2000;
+const MAX_MESSAGE_CONTENT_LENGTH =
+  Number(process.env.MAX_MESSAGE_CONTENT_LENGTH) || 200000;
 
 // 允许访问后端的前端来源，多个用英文逗号分隔
 const CORS_ORIGINS = (
@@ -308,6 +312,9 @@ app.delete("/api/sessions", async (req, res) => {
 app.delete("/api/sessions/:id", async (req, res) => {
   try {
     const { id } = req.params;
+    if (!id || typeof id !== "string" || id.length > 128) {
+      return res.status(400).json({ error: "Invalid session id." });
+    }
 
     // 1. Delete the session document
     const deletedSession = await Session.findOneAndDelete({ id });
@@ -334,7 +341,27 @@ app.delete("/api/sessions/:id", async (req, res) => {
 app.patch("/api/sessions/:id", async (req, res) => {
   try {
     const { id } = req.params;
+    if (!id || typeof id !== "string" || id.length > 128) {
+      return res.status(400).json({ error: "Invalid session id." });
+    }
+
     const { title, model, mode } = req.body;
+
+    // E3: 字段格式校验
+    if (title !== undefined) {
+      if (typeof title !== "string" || title.trim().length === 0) {
+        return res.status(400).json({ error: "title must be a non-empty string." });
+      }
+      if (title.length > 100) {
+        return res.status(400).json({ error: "title must be ≤ 100 chars." });
+      }
+    }
+    if (model !== undefined && (typeof model !== "string" || model.length > 128)) {
+      return res.status(400).json({ error: "model must be a string ≤ 128 chars." });
+    }
+    if (mode !== undefined && mode !== "chat" && mode !== "code") {
+      return res.status(400).json({ error: "mode must be 'chat' or 'code'." });
+    }
 
     const updateFields = { updatedAt: new Date() };
     if (title && typeof title === "string" && title.trim()) {
@@ -370,6 +397,10 @@ app.patch("/api/sessions/:id", async (req, res) => {
 app.patch("/api/sessions/:id/pin", async (req, res) => {
   try {
     const { id } = req.params;
+    if (!id || typeof id !== "string" || id.length > 128) {
+      return res.status(400).json({ error: "Invalid session id." });
+    }
+
     const { isPinned } = req.body;
 
     if (typeof isPinned !== "boolean") {
@@ -401,10 +432,23 @@ app.patch("/api/sessions/:id/pin", async (req, res) => {
 app.put("/api/sessions/:id/messages", async (req, res) => {
   try {
     const { id } = req.params;
+
+    // E3: :id 长度验证
+    if (!id || typeof id !== "string" || id.length > 128) {
+      return res.status(400).json({ error: "Invalid session id." });
+    }
+
     const { messages } = req.body ?? {};
 
     if (!Array.isArray(messages)) {
       return res.status(400).json({ error: "messages must be an array." });
+    }
+
+    // E3: 消息数量上限
+    if (messages.length > MAX_MESSAGES_PER_SESSION) {
+      return res.status(400).json({
+        error: `消息数量超出上限 (${MAX_MESSAGES_PER_SESSION} 条)。`,
+      });
     }
 
     // 校验图片大小：任何一张图片超过限制，直接拒绝整个请求
@@ -427,28 +471,57 @@ app.put("/api/sessions/:id/messages", async (req, res) => {
         (m.role === "user" || m.content.trim() !== ""),
     );
 
-    await Message.deleteMany({ sessionId: id });
-
-    if (valid.length > 0) {
-      await Message.insertMany(
-        valid.map((m) => ({
-          id: typeof m.id === "string" && m.id ? m.id : `msg_${randomUUID()}`,
-          sessionId: id,
-          role: m.role,
-          content: m.content,
-          file: typeof m.file === "string" ? m.file : undefined,
-          fileContent:
-            typeof m.fileContent === "string" ? m.fileContent : undefined,
-          imageBase64:
-            typeof m.imageBase64 === "string" ? m.imageBase64 : undefined,
-          mimeType: typeof m.mimeType === "string" ? m.mimeType : undefined,
-          createdAt:
-            typeof m.createdAt === "string"
-              ? m.createdAt
-              : new Date().toISOString(),
-        })),
-      );
+    // E3: 单条 content 长度上限
+    for (const m of valid) {
+      if (m.content.length > MAX_MESSAGE_CONTENT_LENGTH) {
+        return res.status(400).json({
+          error: `单条消息内容超出长度上限 (${MAX_MESSAGE_CONTENT_LENGTH} 字符)。`,
+        });
+      }
     }
+
+    // E1: 先写后清
+    // 1. 对本次所有消息做 upsert（全部成功后才继续）
+    if (valid.length > 0) {
+      const bulkOps = valid.map((m) => {
+        const msgId =
+          typeof m.id === "string" && m.id ? m.id : `msg_${randomUUID()}`;
+        return {
+          updateOne: {
+            filter: { sessionId: id, id: msgId },
+            update: {
+              $set: {
+                id: msgId,
+                sessionId: id,
+                role: m.role,
+                content: m.content,
+                file: typeof m.file === "string" ? m.file : undefined,
+                fileContent:
+                  typeof m.fileContent === "string"
+                    ? m.fileContent
+                    : undefined,
+                imageBase64:
+                  typeof m.imageBase64 === "string" ? m.imageBase64 : undefined,
+                mimeType:
+                  typeof m.mimeType === "string" ? m.mimeType : undefined,
+                createdAt:
+                  typeof m.createdAt === "string"
+                    ? m.createdAt
+                    : new Date().toISOString(),
+              },
+            },
+            upsert: true,
+          },
+        };
+      });
+      await Message.bulkWrite(bulkOps, { ordered: false });
+    }
+
+    // 2. 仅在写入全部成功后，删除不在本次列表中的旧消息
+    const validIds = valid
+      .map((m) => (typeof m.id === "string" && m.id ? m.id : null))
+      .filter(Boolean);
+    await Message.deleteMany({ sessionId: id, id: { $nin: validIds } });
 
     // 更新 session 的 updatedAt，维持会话列表排序
     await Session.updateOne({ id }, { $set: { updatedAt: new Date() } });
@@ -466,19 +539,31 @@ app.put("/api/sessions/:id/messages", async (req, res) => {
 
 app.post("/api/sessions", async (req, res) => {
   try {
-    const { id, title, mode, model, systemPrompt, messages } = req.body;
-    if (!id || !model) {
+    const { id, title, mode, model, systemPrompt } = req.body;
+    if (!id || typeof id !== "string" || id.length > 128) {
       return res
         .status(400)
-        .json({ error: "Session id and model are required." });
+        .json({ error: "Session id is required and must be ≤ 128 chars." });
+    }
+    if (!model || typeof model !== "string" || model.length > 128) {
+      return res
+        .status(400)
+        .json({ error: "model is required and must be ≤ 128 chars." });
+    }
+    if (title !== undefined && (typeof title !== "string" || title.length > 100)) {
+      return res
+        .status(400)
+        .json({ error: "title must be a string ≤ 100 chars." });
+    }
+    if (systemPrompt !== undefined && typeof systemPrompt !== "string") {
+      return res.status(400).json({ error: "systemPrompt must be a string." });
     }
     const newSession = new Session({
       id,
       title: title || "New Chat",
-      mode: mode || "chat",
+      mode: mode === "code" ? "code" : "chat",
       model,
       systemPrompt: systemPrompt || "",
-      messages: messages || [],
     });
     await newSession.save();
     res.status(201).json(newSession);
@@ -611,13 +696,19 @@ app.post(
       console.error("❌ [RAG] Failed to process document:", error);
 
       // 即使报错也要清理临时文件
-      try {
-        await fs.unlink(filePath);
-      } catch (e) {}
+      await fs.unlink(filePath).catch(() => {});
 
-      const isValidationError =
-        error.code === "EMPTY_PDF_CONTENT" || error.code === "PDF_TOO_LONG";
-      res.status(isValidationError ? 400 : 500).json({
+      if (error.code === "EMPTY_PDF_CONTENT") {
+        return res.status(400).json({
+          error: `PDF 中没有可提取的文本，可能是扫描件或图片 PDF。`,
+        });
+      }
+      if (error.code === "PDF_TOO_LONG") {
+        return res.status(413).json({
+          error: `PDF 文本过长，超过 ${MAX_PDF_CHARS.toLocaleString()} 字符上限。`,
+        });
+      }
+      res.status(500).json({
         error: error.message || "Failed to process document.",
       });
     }
@@ -650,6 +741,15 @@ app.post("/api/chat", async (req, res) => {
 
   if (!Array.isArray(messages)) {
     return res.status(400).json({ error: "messages must be an array." });
+  }
+
+  // E3: 校验 messages 每项 content 为字符串
+  for (const m of messages) {
+    if (m && typeof m.content !== "string") {
+      return res
+        .status(400)
+        .json({ error: "Each message must have a string content field." });
+    }
   }
 
   // 校验图片数量与大小
@@ -761,7 +861,7 @@ RAG Strict Rules:
 1. Answer the user's question based STRICTLY and ONLY on the facts provided in the Context above.
 2. The language of your response MUST match the language used by the user in their prompt/question. (Do NOT translate to other languages unless the user explicitly requested a translation).
 3. Do NOT add external facts, examples, tool names, libraries, version numbers, or dates that are not present in the Context.
-4. If the answer cannot be found in the Context, state clearly in the user's language: "文档中没有提到相关内容" (or the equivalent in the user's language, e.g. "The provided document does not mention this.").
+4. If the Context contains NO information at all to answer the question, state briefly in the user's language that the document does not mention it. If the Context partially answers the question, answer only what is supported — do NOT append a fixed disclaimer sentence.
 5. Stick strictly to the original meaning and phrasing from the Context without expansion or embellishment.
 6. Do NOT use LaTeX formulas ($ or $$) unless the Context itself explicitly contains mathematical formulas. When citing text, quotes, or statements from the Context, use standard quotation marks or Markdown blockquotes (>) instead of formula blocks.
 === END OF CONTEXT ===
@@ -1108,6 +1208,21 @@ RAG Strict Rules:
 // ========================================
 // Start Server
 // ========================================
+
+// E3: 统一错误处理中间件（放在所有路由之后）
+// JSON 解析失败 → 400；请求体过大 → 413；其余 → 500
+// 确保所有错误响应为 JSON，不返回 HTML 错误页
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (err.type === "entity.parse.failed") {
+    return res.status(400).json({ error: "请求体不是有效的 JSON。" });
+  }
+  if (err.type === "entity.too.large") {
+    return res.status(413).json({ error: "请求体超出大小限制（最大 20MB）。" });
+  }
+  console.error("[Server] Unhandled middleware error:", err.message);
+  res.status(500).json({ error: "服务器内部错误。" });
+});
 
 connectDB().then(() => {
   const isLoopback = ["127.0.0.1", "localhost", "::1"].includes(HOST);
